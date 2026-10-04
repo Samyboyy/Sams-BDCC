@@ -34,7 +34,7 @@ exists (Module registration, GameExtender hooks, InteractionGoal, etc.).
   affection and lust, with a tooltip explaining each.
 - **Functions changed:** `NPCRow.setRelationShipData` returns early with module text when the module is present.
   The legacy text is still produced when it is not. In the scene, the `Relationship` label's `rect_min_size`
-  changed from `(140, 50)` to `(200, 72)` so three lines fit. The Friend, Nemesis and Owner label is untouched.
+  changed from `(140, 50)` to `(250, 72)` so three lines fit. The Friend, Nemesis and Owner label is untouched.
 - **Compatibility risk:** Low. Legacy values are hidden here (patch 3 does the same for the Talking screen) but still drive AI and Friend/Nemesis.
 - **Reapply after upstream update:** Re-add the early-return block at the top of `setRelationShipData`
   and the label size.
@@ -49,3 +49,23 @@ exists (Module registration, GameExtender hooks, InteractionGoal, etc.).
   starter when the player is the reacter. Without the module the original line is printed.
 - **Compatibility risk:** Low. `getAffectionString` and `getLustString` are now unused by the module path but remain.
 - **Reapply after upstream update:** Re-add the `if(sandboxModule != null):` branch around the `saynn` call.
+
+### 4. Talking reports its outcomes to the module (Milestone 1D)
+
+- **Files:** `Game/InteractionSystem/Interactions/Talking.gd`, `Game/InteractionSystem/PawnInteractionBase.gd`
+- **Reason:** Conversation outcomes changed only the legacy values, and the legacy percentage messages contradicted the directed axes.
+  The module now applies a small fixed legacy delta (100:1 with the axes, through `RelationshipSystem` so AffectionChange and LustChange
+  events still fire, with the legacy message suppressed) plus the directed change, once per outcome, with one combined message.
+- **Functions changed:**
+  - `Talking.gd`: added `getSandboxNpcID`, `sandboxActive`, `sandboxConversationOutcome` (returns true when the module applied the outcome)
+    and `sandboxChatOutcome`. With exactly one `"pc"` participant the NPC is whichever role is not the player and the module records
+    `directed_relationships[npc]["pc"]`; with no or two players the module does nothing and the old behaviour stays.
+    `chat_asked_do`, `flirt_pickupline_do`, `flirt_flirted_do`, `offered_sex_do` and `offered_self_do` ask the module first and run the old
+    `affectAffection` / `affectLust` formula and the `GotRefused` event only when the module did not handle the outcome.
+    Chat disagreement or "whatever", flirt rejection and sex refusal are ordinary social boundaries, so they send no `GotRefused`
+    (it can start a Nemesis, up to about 36% for a very mean, hostile NPC). Bad social events are reserved for future hostile responses.
+  - `PawnInteractionBase.doReactToChat` gained `applyLegacyAffection:bool = true` and `reactToLustFocus` gained `applyLegacy:bool = true`.
+    The defaults keep every other caller identical; `Talking` passes `false` when the module handled the outcome.
+- **Compatibility risk:** Low. Without the module nothing changes. `CharacterPawn.affectAffection` and `affectLust` are untouched, so every
+  other caller keeps its legacy messages.
+- **Reapply after upstream update:** Re-add the helpers and the guarded calls in `Talking.gd`, and the two optional parameters.

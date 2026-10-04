@@ -4,6 +4,7 @@ class_name SandboxOverhaulModule
 const ExtenderScript = preload("res://Modules/SandboxOverhaulModule/Core/SandboxGameExtender.gd")
 const ConsentScript = preload("res://Modules/SandboxOverhaulModule/Relationships/SexConsent.gd")
 const AftermathScript = preload("res://Modules/SandboxOverhaulModule/Relationships/SexAftermath.gd")
+const ConversationScript = preload("res://Modules/SandboxOverhaulModule/Relationships/ConversationRelationships.gd")
 
 func _init():
 	id = "SandboxOverhaulModule"
@@ -70,3 +71,24 @@ func getFeelingsTooltip() -> String:
 
 func getFeelingsSummary(observerID:String, targetID:String) -> String:
 	return AftermathScript.formatSummary(getRelationships(), observerID, targetID)
+
+# Called by Talking.gd (see CORE_PATCHES.md). Applies one conversation outcome: the directed feelings, the fixed legacy
+# deltas (events still fire, legacy messages suppressed) and one combined message when the player is the target.
+# Returns {blocked, changes, legacyAffection, legacyLust}; when blocked nothing was applied and no message shown.
+func applyConversationOutcome(outcome, observerID, targetID) -> Dictionary:
+	if(GM.main == null || !is_instance_valid(GM.main)):
+		return {"blocked": false, "changes": {}, "legacyAffection": 0.0, "legacyLust": 0.0}
+	var result:Dictionary = ConversationScript.apply(getRelationships(), getState().cooldowns, outcome, observerID, targetID, GM.main.currentDay)
+	if(result["blocked"]):
+		return result
+	var RS = GM.main.RS
+	if(result["legacyAffection"] != 0.0):
+		RS.addAffection(observerID, targetID, result["legacyAffection"], false, false)
+	if(result["legacyLust"] != 0.0):
+		RS.addLust(observerID, targetID, result["legacyLust"], false, false)
+	if(!result["changes"].empty() && targetID == "pc"):
+		var npc = GlobalRegistry.getCharacter(observerID)
+		var line:String = ConversationScript.formatMessage(npc.getName() if npc != null else "Someone", result["changes"])
+		if(line != ""):
+			GM.main.addMessage(line)
+	return result

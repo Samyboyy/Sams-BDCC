@@ -5,6 +5,7 @@ const EXTENDER_ID = "SandboxGameExtender"
 const StateScript = preload("res://Modules/SandboxOverhaulModule/Core/SandboxState.gd") # no reliance on the editor-written class cache
 
 var state = StateScript.new()
+const ConversationScript = preload("res://Modules/SandboxOverhaulModule/Relationships/ConversationRelationships.gd")
 const RelationshipsScript = preload("res://Modules/SandboxOverhaulModule/Relationships/DirectedRelationships.gd")
 
 var relationships
@@ -38,6 +39,9 @@ func pruneMissingCharacters():
 	for characterID in relationships.getCharacterIDs():
 		if(characterID != "pc" && GM.main.getCharacter(characterID) == null):
 			relationships.removeCharacter(characterID)
+	for characterID in ConversationScript.getCooldownCharacterIDs(state.cooldowns):
+		if(characterID != "pc" && GM.main.getCharacter(characterID) == null):
+			ConversationScript.removeCooldownsOf(state.cooldowns, characterID)
 
 func saveData():
 	var theState = getState()

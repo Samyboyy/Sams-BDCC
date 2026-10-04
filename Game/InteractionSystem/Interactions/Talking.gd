@@ -33,6 +33,38 @@ func start(_pawns:Dictionary, _args:Dictionary):
 		setState("", "starter")
 		sendSocialEvent("starter", "reacter", SocialEventType.GotTalkedTo)
 
+# Sandbox overhaul (see CORE_PATCHES.md). Migrated outcomes are applied by the module instead of the old formulas.
+# With exactly one "pc" participant the module records the NPC's feelings towards the player, whichever role the NPC has.
+func getSandboxNpcID() -> String:
+	var starterID:String = getRoleID("starter")
+	var reacterID:String = getRoleID("reacter")
+	if(starterID == "pc" && reacterID != "pc" && reacterID != ""):
+		return reacterID
+	if(reacterID == "pc" && starterID != "pc" && starterID != ""):
+		return starterID
+	return ""
+
+func sandboxActive() -> bool:
+	return GlobalRegistry.getModule("SandboxOverhaulModule") != null && getSandboxNpcID() != ""
+
+# Returns true when the module applied the outcome, so the old affectAffection/affectLust formula and the GotRefused
+# event must NOT also run. False (old behaviour) when there is no module or the pair is not exactly one player and one NPC.
+func sandboxConversationOutcome(outcome:String) -> bool:
+	if(!sandboxActive()):
+		return false
+	var _result:Dictionary = GlobalRegistry.getModule("SandboxOverhaulModule").applyConversationOutcome(outcome, getSandboxNpcID(), "pc")
+	return true
+
+func sandboxChatOutcome(_chat:Dictionary) -> bool:
+	var outcome:String = "neutral_exchange"
+	if(chatAnswer == "agree"):
+		var reactChar = getRoleChar(_chat["reactRole"])
+		var theInterest:float = 1.0 if reactChar.isPlayer() else abs(reactChar.getLustInterests().getInterestValue(_chat["topicID"]))
+		outcome = "shared_interest" if theInterest >= 0.5 else "positive_conversation"
+	elif(chatAnswer == "disagree"):
+		outcome = "respectful_disagreement"
+	return sandboxConversationOutcome(outcome)
+
 func init_text():
 	var theStarter:BaseCharacter = getRoleChar("starter")
 	var theReacter:BaseCharacter = getRoleChar("reacter")
@@ -329,12 +361,14 @@ func chat_asked_text():
 
 func chat_asked_do(_id:String, _args:Dictionary, _context:Dictionary):
 	if(_id == "react"):
-		doReactToChat(_args, isBeingSpied())
 		chatAnswer = _args["answer"]
+		var sandboxHandled:bool = sandboxChatOutcome(_args["chat"])
+		doReactToChat(_args, isBeingSpied(), !sandboxHandled)
 		setState("chat_reacted", "starter")
 		if(chatAnswer != "agree"):
 			gotDenied = true
-			sendSocialEvent("reacter", "starter", SocialEventType.GotRefused)
+			if(!sandboxHandled):
+				sendSocialEvent("reacter", "starter", SocialEventType.GotRefused)
 
 
 func chat_reacted_text():
@@ -407,13 +441,17 @@ func flirt_pickupline_text():
 
 func flirt_pickupline_do(_id:String, _args:Dictionary, _context:Dictionary):
 	if(_id == "accept"):
-		affectLust("reacter", "starter", 0.1)
+		if(!sandboxConversationOutcome("flirt_accepted")):
+			affectLust("reacter", "starter", 0.1)
 		setState("flirt_accepted", "starter")
 	if(_id == "deny"):
-		affectLust("reacter", "starter", -0.07)
+		var sandboxHandled:bool = sandboxConversationOutcome("flirt_rejected")
+		if(!sandboxHandled):
+			affectLust("reacter", "starter", -0.07)
 		setState("flirt_denied", "starter")
 		gotDenied = true
-		sendSocialEvent("reacter", "starter", SocialEventType.GotRefused)
+		if(!sandboxHandled):
+			sendSocialEvent("reacter", "starter", SocialEventType.GotRefused)
 
 
 func flirt_accepted_text():
@@ -467,10 +505,11 @@ func flirt_flirted_text():
 
 func flirt_flirted_do(_id:String, _args:Dictionary, _context:Dictionary):
 	if(_id == "flirt_react"):
-		reactToLustFocus(_args, lust)
+		reactToLustFocus(_args, lust, !sandboxActive())
 		setState("flirt_reacted", "starter")
 		var answer:String = lust["answer"] if lust.has("answer") else "accept"
-		if(answer != "accept"):
+		var sandboxHandled:bool = sandboxConversationOutcome("flirt_accepted" if answer == "accept" else "flirt_rejected")
+		if(answer != "accept" && !sandboxHandled):
 			sendSocialEvent("reacter", "starter", SocialEventType.GotRefused)
 
 
@@ -506,14 +545,19 @@ func offered_sex_text():
 
 func offered_sex_do(_id:String, _args:Dictionary, _context:Dictionary):
 	if(_id == "agree"):
+		var _sandboxHandled:bool = sandboxConversationOutcome("sex_request_accepted")
 		setState("offered_sex_agreed", "starter")
 	if(_id == "deny"):
+		# A simple refusal changes no relationship value and sends no GotRefused event.
+		var sandboxHandled:bool = sandboxConversationOutcome("sex_request_refused")
 		setState("offered_sex_deny", "starter")
-		affectAffection("starter", "reacter", -0.1)
+		if(!sandboxHandled):
+			affectAffection("starter", "reacter", -0.1)
 		getRolePawn("reacter").afterSocialInteraction()
 		getRolePawn("starter").afterFailedSocialInteraction()
 		gotDenied = true
-		sendSocialEvent("reacter", "starter", SocialEventType.GotRefused)
+		if(!sandboxHandled):
+			sendSocialEvent("reacter", "starter", SocialEventType.GotRefused)
 
 
 func offered_sex_agreed_text():
@@ -547,14 +591,19 @@ func offered_self_text():
 
 func offered_self_do(_id:String, _args:Dictionary, _context:Dictionary):
 	if(_id == "agree"):
+		var _sandboxHandled:bool = sandboxConversationOutcome("sex_request_accepted")
 		setState("offered_self_agreed", "starter")
 	if(_id == "deny"):
+		# A simple refusal changes no relationship value and sends no GotRefused event.
+		var sandboxHandled:bool = sandboxConversationOutcome("sex_request_refused")
 		setState("offered_self_deny", "starter")
-		affectAffection("starter", "reacter", -0.1)
+		if(!sandboxHandled):
+			affectAffection("starter", "reacter", -0.1)
 		getRolePawn("reacter").afterSocialInteraction()
 		getRolePawn("starter").afterFailedSocialInteraction()
 		gotDenied = true
-		sendSocialEvent("reacter", "starter", SocialEventType.GotRefused)
+		if(!sandboxHandled):
+			sendSocialEvent("reacter", "starter", SocialEventType.GotRefused)
 
 
 func offered_self_agreed_text():

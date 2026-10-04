@@ -1369,7 +1369,7 @@ func addReactToChatButtons(chatEntry:Dictionary, actionID:String):
 		args = {answer="whatever",chat=chatEntry,},
 	})
 
-func doReactToChat(_args:Dictionary, skipPcCheck:bool = true):
+func doReactToChat(_args:Dictionary, skipPcCheck:bool = true, applyLegacyAffection:bool = true):
 	var answer:String = _args["answer"]
 	var chatEntry:Dictionary = _args["chat"]
 	
@@ -1387,13 +1387,16 @@ func doReactToChat(_args:Dictionary, skipPcCheck:bool = true):
 	var reactPawn = getRolePawn(reactRole)
 	
 	if(answer == "agree"):
-		affectAffection(reactRole, startRole, abs(interestValue) * 0.15)
+		if(applyLegacyAffection):
+			affectAffection(reactRole, startRole, abs(interestValue) * 0.15)
 		startPawn.afterSocialInteraction()
 	if(answer == "whatever"):
-		affectAffection(reactRole, startRole, 0.03)
+		if(applyLegacyAffection):
+			affectAffection(reactRole, startRole, 0.03)
 		startPawn.afterSocialInteraction()
 	if(answer == "disagree"):
-		affectAffection(reactRole, startRole, -abs(interestValue) * 0.05)
+		if(applyLegacyAffection):
+			affectAffection(reactRole, startRole, -abs(interestValue) * 0.05)
 		startPawn.afterFailedSocialInteraction()
 	reactPawn.afterSocialInteraction()
 	
@@ -1505,7 +1508,7 @@ func addReactToLustFocusButtons(actionID:String, lustEntry:Dictionary):
 		},
 	})
 
-func reactToLustFocus(args:Dictionary, lustEntry:Dictionary):
+func reactToLustFocus(args:Dictionary, lustEntry:Dictionary, applyLegacy:bool = true):
 	#var lustEntry:Dictionary = args["lust"]
 	var answer:String = args["answer"]
 	var likeness:float = args["likeness"]
@@ -1648,11 +1651,12 @@ func reactToLustFocus(args:Dictionary, lustEntry:Dictionary):
 		if(hasLearnedAnyLustInterests == true):
 			lustEntry["hasLearnedAnyLustInterests"] = true
 
-	if(answer == "accept"):
-		affectLust(_role2, _role1, max(likeness, 0.1) * 0.3)
-	elif(answer == "deny"):
-		affectLust(_role2, _role1, -max(1.0-likeness, 0.2) * 0.2)
-		affectAffection(_role1, _role2, -max(1.0-likeness, 0.1) * 0.05)
+	if(applyLegacy):
+		if(answer == "accept"):
+			affectLust(_role2, _role1, max(likeness, 0.1) * 0.3)
+		elif(answer == "deny"):
+			affectLust(_role2, _role1, -max(1.0-likeness, 0.2) * 0.2)
+			affectAffection(_role1, _role2, -max(1.0-likeness, 0.1) * 0.05)
 	
 	return likeness
 

@@ -25,3 +25,12 @@ Only the sex aftermath (below) writes these values so far. BDCC's own `Relations
 consensual changes the NPC participants' feelings towards their partner; coerced or forced changes the NPC victim's feelings
 towards the responsible character (affection, trust, fear; never desire or respect). The player's own feelings are never stored.
 Unlisted interactions are `UNKNOWN` and change nothing. Hook: `PawnInteractionBase.doSexAftermath` (see `CORE_PATCHES.md`).
+
+## Conversations (Milestone 1D)
+
+`ConversationRelationships` maps Talking outcomes to the NPC's feelings towards the player (whichever of starter or reacter the NPC is; conversations without exactly one player are not handled) (see the `RULES` table:
+shared interest, positive conversation, respectful disagreement, flirt accepted or rejected, sex request accepted).
+Neutral exchanges and refused sex requests change nothing. Fear is never changed. Each outcome also applies a fixed legacy delta (100:1) to BDCC's
+RelationshipSystem, temporary while Friend, Nemesis and AI still read it. A rewarding outcome is paid once per in-game day per
+NPC, target and outcome in both systems (`SandboxState.cooldowns`, keys starting `conv|`); negative outcomes are never limited.
+`hostile_response` exists but no current Talking outcome produces it.
