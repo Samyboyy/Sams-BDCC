@@ -619,6 +619,9 @@ func trySpawnPawn(specificPawnType = null):
 	
 	var pickedRandomCharID:String = pawnType.tryPickCharacterID()
 	if(pickedRandomCharID != ""):
+		var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+		if(sandboxModule != null && !sandboxModule.canSpawnPawn(pickedRandomCharID)):
+			return false # still asleep in their cell
 		spawnPawn(pickedRandomCharID, randomPawnType)
 		return true
 	

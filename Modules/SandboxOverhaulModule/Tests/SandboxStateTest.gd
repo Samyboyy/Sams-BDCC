@@ -14,10 +14,10 @@ func check(cond: bool, msg: String):
 
 func _init():
 	var s = StateScript.new()
-	check(s.schema_version == 2 && s.npc_profiles.empty() && s.directed_relationships.empty() && s.major_memories.empty() && s.knowledge.empty() && s.cell_assignments.empty() && s.gang_state.empty() && s.obligations.empty() && s.cooldowns.empty(), "fresh defaults")
-	check(s.getNpcProfile("x").empty() && s.getMajorMemories("x").empty() && s.getCellAssignment("x") == "", "safe getters")
+	check(s.schema_version == 3 && s.npc_profiles.empty() && s.directed_relationships.empty() && s.major_memories.empty() && s.knowledge.empty() && s.cell_assignments.empty() && s.gang_state.empty() && s.obligations.empty() && s.cooldowns.empty(), "fresh defaults")
+	check(s.getNpcProfile("x").empty() && s.getMajorMemories("x").empty() && s.getCellAssignment("x").empty(), "safe getters")
 	
-	s.cell_assignments["bob"] = "A1"
+	s.cell_assignments["bob"] = {"block": "orange", "cell": 4}
 	s.obligations.append({"source_id": "job"})
 	s.cooldowns["chat"] = 5
 	var json = JSON.print(s.saveData())
@@ -26,11 +26,11 @@ func _init():
 	
 	var t = StateScript.new()
 	t.loadData(parsed)
-	check(t.getCellAssignment("bob") == "A1" && t.obligations.size() == 1 && t.getCooldown("chat") == 5, "round trip restores entries")
-	check(t.schema_version == 2 && typeof(t.schema_version) == TYPE_INT, "schema version preserved as int")
+	check(t.getCellAssignment("bob")["cell"] == 4 && t.getCellAssignment("bob")["block"] == "orange" && t.obligations.size() == 1 && t.getCooldown("chat") == 5, "round trip restores entries")
+	check(t.schema_version == 3 && typeof(t.schema_version) == TYPE_INT, "schema version preserved as int")
 	
 	t.loadData({})
-	check(t.cell_assignments.empty() && t.schema_version == 2, "empty dict")
+	check(t.cell_assignments.empty() && t.schema_version == 3, "empty dict")
 	t.loadData(null)
 	check(t.cell_assignments.empty(), "null data")
 	t.loadData({"cooldowns": null, "obligations": "bad", "knowledge": {"a": {}}})
@@ -41,9 +41,9 @@ func _init():
 	check(t.schema_version == 99, "newer schema version kept")
 	
 	t.loadData({"schema_version": 0, "cooldowns": {"old": 1}})
-	check(t.schema_version == 2 && t.getCooldown("old") == 1, "older schema migrated to current, data kept")
+	check(t.schema_version == 3 && t.getCooldown("old") == 1, "older schema migrated to current, data kept")
 	t.loadData({"schema_version": "garbage"})
-	check(t.schema_version == 2, "non-numeric schema version falls back")
+	check(t.schema_version == 3, "non-numeric schema version falls back")
 	var snap = t.saveData()
 	snap["cooldowns"]["mut"] = 1
 	check(!t.cooldowns.has("mut"), "saveData returns a copy")
@@ -53,7 +53,7 @@ func _init():
 	t.clear()
 	check(t.directed_relationships.empty(), "clear empties directed_relationships")
 	t.loadData({"cooldowns": {"k": 1}})
-	check(t.directed_relationships.empty() && t.schema_version == 2, "missing directed_relationships defaults, schema migrates to 2")
+	check(t.directed_relationships.empty() && t.schema_version == 3, "missing directed_relationships defaults, schema migrates to 3")
 
 	print("SandboxStateTest: " + ("PASS" if failures == 0 else str(failures) + " failure(s)"))
 	quit(1 if failures > 0 else 0)

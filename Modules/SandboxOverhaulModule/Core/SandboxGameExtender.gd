@@ -6,6 +6,7 @@ const StateScript = preload("res://Modules/SandboxOverhaulModule/Core/SandboxSta
 
 var state = StateScript.new()
 const ConversationScript = preload("res://Modules/SandboxOverhaulModule/Relationships/ConversationRelationships.gd")
+const CellsScript = preload("res://Modules/SandboxOverhaulModule/Cells/Cells.gd")
 const InjuriesScript = preload("res://Modules/SandboxOverhaulModule/Injuries/Injuries.gd")
 const CombatScript = preload("res://Modules/SandboxOverhaulModule/Relationships/CombatConsequences.gd")
 const RelationshipsScript = preload("res://Modules/SandboxOverhaulModule/Relationships/DirectedRelationships.gd")
@@ -13,6 +14,8 @@ const RelationshipsScript = preload("res://Modules/SandboxOverhaulModule/Relatio
 var relationships
 var combat
 var injuries
+var cells
+var scheduleBucket:int = -1 # last ten-minute bucket the nightly schedule ran in (not saved, so it runs again after a load)
 var ownerMainId: int = 0 # instance id of the MainScene the state belongs to (ids are never reused, pointers can be)
 
 func _init():
@@ -20,10 +23,18 @@ func _init():
 	relationships = RelationshipsScript.new(state)
 	combat = CombatScript.new(state, relationships)
 	injuries = InjuriesScript.new(state)
+	cells = CellsScript.new(state)
 
 func register(_GES: GameExtenderSystem):
 	_GES.register(self, ExtendGame.saveLoadData)
 	_GES.register(self, ExtendGame.pcHoursPassed)
+	_GES.register(self, ExtendGame.pcProcessTime)
+
+# Runs the nightly schedule at most once per ten in-game minutes (the module decides; this is only the trigger).
+func pcProcessTime(_pc, _seconds):
+	var theModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(theModule != null):
+		theModule.onScheduleTick()
 
 # Injuries heal with the player's hour counter, which runs on every time skip, so every character's injuries are processed here
 # (the NPC hour hook only reaches characters that are currently being simulated).
@@ -56,6 +67,11 @@ func getInjuries():
 	var _state = getState()
 	return injuries
 
+# Cell service, same lifetime rules as getRelationships.
+func getCells():
+	var _state = getState()
+	return cells
+
 # Drops characters that definitely no longer exist. Does nothing without a live MainScene.
 func pruneMissingCharacters():
 	if(GM.main == null || !is_instance_valid(GM.main)):
@@ -66,6 +82,9 @@ func pruneMissingCharacters():
 	for characterID in ConversationScript.getCooldownCharacterIDs(state.cooldowns):
 		if(characterID != "pc" && GM.main.getCharacter(characterID) == null):
 			ConversationScript.removeCooldownsOf(state.cooldowns, characterID)
+	for characterID in cells.getCharacterIDs():
+		if(characterID != "pc" && GM.main.getCharacter(characterID) == null):
+			cells.removeCharacter(characterID)
 	for characterID in injuries.getCharacterIDs():
 		if(characterID != "pc" && GM.main.getCharacter(characterID) == null):
 			injuries.removeCharacter(characterID)

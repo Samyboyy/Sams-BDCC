@@ -105,3 +105,17 @@ registered by `SandboxGameExtender`) and the penalties (BDCC's own buff and dama
   `getMaxStamina` scales the character's own injury-free maximum (base + skills + buffs); `getDodgeChance` scales the final positive chance (the
   deliberate `isDodging()` result of 1 is untouched). The scale is read straight from the stored injury, so there is no recursion. Both checks are skipped
   when `SandboxOverhaulModule` is absent or its extender is not yet registered.
+
+### 7. Cells, cellmates and the nightly routine (Milestone 4)
+
+Everything else is module-contained: the cell data, the schedule (the existing `pcProcessTime` game-extender hook, run at most once per ten in-game minutes),
+the cell directory scene, and the directory buttons, which a world edit (`WorldEdits/CellsWorldEdit.gd`) adds to the existing cell block rooms as `RoomAction`
+nodes, so the map scene is not edited. Base-game edits, all no-ops without `SandboxOverhaulModule`:
+
+- **`Game/InteractionSystem/InteractionSystem.gd` `trySpawnPawn()`:** after a random existing inmate is picked, `canSpawnPawn(id)` can veto the spawn while that
+  inmate is still asleep in their cell (before their wake time). A module-only solution was not enough: nothing else sits between "pick an existing character"
+  and `spawnPawn`, and filtering earlier (`characterIDCanBePicked`) would make BDCC generate brand-new inmates instead whenever everyone is asleep.
+  Without the hook the morning wave would spawn inmates who the schedule then sends straight back.
+- **`Game/InteractionSystem/Interactions/Talking.gd`:** a "Which cell?" action in `init_text` (player talking to an NPC, score 0 so NPCs never pick it), the `ask_cell` branch
+  in `init_do` (stores the knowledge through the module, nothing else) and the `asked_cell` state.
+- **`Scenes/MeScene.gd`:** a "Cells" button in the main menu and a `cellsMenu` state that prints the module's text (your cell, cellmate, learned cells).

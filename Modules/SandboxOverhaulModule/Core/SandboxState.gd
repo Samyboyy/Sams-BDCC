@@ -4,15 +4,22 @@ class_name SandboxState
 const AxisScript = preload("res://Modules/SandboxOverhaulModule/Relationships/FeelingAxis.gd")
 
 # 1 -> 2: injuries were added (version-1 saves have none).
-const CURRENT_SCHEMA_VERSION = 2
+# 2 -> 3: cell_assignments got its real structure and known_cells and cell_presence were added (older saves have none; cells are created on first use).
+const CURRENT_SCHEMA_VERSION = 3
 const InjuriesScript = preload("res://Modules/SandboxOverhaulModule/Injuries/Injuries.gd")
+const CellsScript = preload("res://Modules/SandboxOverhaulModule/Cells/Cells.gd")
 
 var schema_version: int = CURRENT_SCHEMA_VERSION
 var npc_profiles: Dictionary = {}
 var directed_relationships: Dictionary = {}
 var major_memories: Dictionary = {}
 var knowledge: Dictionary = {}
+# characterID -> {"block": "orange"|"red"|"lilac", "cell": int}. See Cells.
 var cell_assignments: Dictionary = {}
+# observerID -> {targetID: true}: whose cell the observer has learned.
+var known_cells: Dictionary = {}
+# Tonight's attendance: characterID -> {"night": int, "state": "home"|"away"}. Only meaningful during that night; see Cells.
+var cell_presence: Dictionary = {}
 var gang_state: Dictionary = {}
 var obligations: Array = []
 var cooldowns: Dictionary = {}
@@ -21,7 +28,7 @@ var reputation: Dictionary = {"combat": 0.0, "defiance": 0.0}
 # Lasting combat injuries: injuries[characterID][type] = {"severity": 1..3, "remainingHours": float}. See Injuries.
 var injuries: Dictionary = {}
 
-const DICT_FIELDS = ["npc_profiles", "directed_relationships", "major_memories", "knowledge", "cell_assignments", "gang_state", "cooldowns"]
+const DICT_FIELDS = ["npc_profiles", "directed_relationships", "major_memories", "knowledge", "gang_state", "cooldowns"]
 
 func clear():
 	schema_version = CURRENT_SCHEMA_VERSION
@@ -30,6 +37,9 @@ func clear():
 	obligations = []
 	reputation = {"combat": 0.0, "defiance": 0.0}
 	injuries = {}
+	cell_assignments = {}
+	known_cells = {}
+	cell_presence = {}
 
 # Safe getters: missing entries return defaults, never null.
 func getNpcProfile(charID: String) -> Dictionary:
@@ -44,7 +54,7 @@ func getMajorMemories(charID: String) -> Array:
 func getKnowledge(knowerID: String) -> Dictionary:
 	return knowledge.get(knowerID, {})
 
-func getCellAssignment(charID: String, default = ""):
+func getCellAssignment(charID: String, default = {}):
 	return cell_assignments.get(charID, default)
 
 func getObligations() -> Array:
@@ -54,7 +64,7 @@ func getCooldown(key: String, default = 0):
 	return cooldowns.get(key, default)
 
 func saveData() -> Dictionary:
-	var data = {"schema_version": schema_version, "obligations": obligations.duplicate(true), "reputation": reputation.duplicate(true), "injuries": injuries.duplicate(true)}
+	var data = {"schema_version": schema_version, "obligations": obligations.duplicate(true), "reputation": reputation.duplicate(true), "injuries": injuries.duplicate(true), "cell_assignments": cell_assignments.duplicate(true), "known_cells": known_cells.duplicate(true), "cell_presence": cell_presence.duplicate(true)}
 	for field in DICT_FIELDS:
 		data[field] = get(field).duplicate(true)
 	return data
@@ -76,6 +86,10 @@ func loadData(data) -> void:
 	reputation = sanitizeReputation(data.get("reputation"))
 	if(schema_version >= 2):
 		injuries = sanitizeInjuries(data.get("injuries"))
+	if(schema_version >= 3):
+		cell_assignments = sanitizeCellAssignments(data.get("cell_assignments"))
+		known_cells = sanitizeKnownCells(data.get("known_cells"))
+		cell_presence = sanitizeCellPresence(data.get("cell_presence"))
 	var loadedObligations = data.get("obligations")
 	if(loadedObligations is Array):
 		obligations = loadedObligations.duplicate(true)
@@ -112,6 +126,65 @@ func sanitizeRelationships(raw) -> Dictionary:
 			if(!result.has(observerID)):
 				result[observerID] = {}
 			result[observerID][targetID] = pair
+	return result
+
+# Keeps only characterID -> {block, cell} with a known block and a cell number from 1 to 9999. A cell holds two at most: when a cell has too many
+# valid entries the player and then the lowest IDs keep it, so the repair is the same every time. Never aliases the input.
+func sanitizeCellAssignments(raw) -> Dictionary:
+	var result:Dictionary = {}
+	if(!(raw is Dictionary)):
+		return result
+	var ids:Array = []
+	for characterID in raw:
+		if(characterID is String && characterID != "" && raw[characterID] is Dictionary):
+			ids.append(characterID)
+	ids.sort()
+	if(ids.has("pc")):
+		ids.erase("pc")
+		ids.push_front("pc")
+	var counts:Dictionary = {}
+	for characterID in ids:
+		var entry:Dictionary = raw[characterID]
+		if(!CellsScript.isValidBlock(entry.get("block")) || !CellsScript.isNumberValue(entry.get("cell"))):
+			continue
+		var cell:int = int(round(float(entry["cell"])))
+		if(cell < 1 || cell > CellsScript.MAX_CELL_NUMBER):
+			continue
+		var key:String = entry["block"] + "|" + str(cell)
+		if(counts.get(key, 0) >= CellsScript.CAPACITY):
+			continue
+		counts[key] = counts.get(key, 0) + 1
+		result[characterID] = {"block": entry["block"], "cell": cell}
+	return result
+
+# Keeps only characterID -> {night: number, state: "home"|"away"}. Saves without it (or with bad data) simply have no attendance recorded.
+func sanitizeCellPresence(raw) -> Dictionary:
+	var result:Dictionary = {}
+	if(!(raw is Dictionary)):
+		return result
+	for characterID in raw:
+		if(!(characterID is String) || characterID == "" || !(raw[characterID] is Dictionary)):
+			continue
+		var entry:Dictionary = raw[characterID]
+		if(!CellsScript.isNumberValue(entry.get("night")) || !CellsScript.PRESENCE_STATES.has(entry.get("state"))):
+			continue
+		result[characterID] = {"night": int(round(float(entry["night"]))), "state": entry["state"]}
+	return result
+
+# Keeps only observerID -> {targetID: true} with non-empty string IDs, no self-knowledge and only true values.
+func sanitizeKnownCells(raw) -> Dictionary:
+	var result:Dictionary = {}
+	if(!(raw is Dictionary)):
+		return result
+	for observerID in raw:
+		if(!(observerID is String) || observerID == "" || !(raw[observerID] is Dictionary)):
+			continue
+		for targetID in raw[observerID]:
+			if(!(targetID is String) || targetID == "" || targetID == observerID || !(typeof(raw[observerID][targetID]) == TYPE_BOOL && raw[observerID][targetID])):
+				continue
+			if(!result.has(observerID)):
+				result[observerID] = {}
+			result[observerID][targetID] = true
 	return result
 
 # Keeps only characterID -> known type -> {severity 1..3, remainingHours > 0}. Malformed entries are dropped; unknown extra keys on
@@ -160,3 +233,9 @@ func migrate() -> void:
 		# 1 -> 2: injuries did not exist, so a version-1 save has none.
 		injuries = {}
 		schema_version = 2
+	if(schema_version == 2):
+		# 2 -> 3: cell_assignments had no structure and known_cells did not exist; cells are created on first use, so start empty.
+		cell_assignments = {}
+		known_cells = {}
+		cell_presence = {}
+		schema_version = 3

@@ -224,6 +224,11 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://Modules/CellblockModule/Module.gd"
 }, {
+"base": "Reference",
+"class": "Cells",
+"language": "GDScript",
+"path": "res://Modules/SandboxOverhaulModule/Cells/Cells.gd"
+}, {
 "base": "BaseCharacter",
 "class": "Character",
 "language": "GDScript",
@@ -2138,6 +2143,7 @@ _global_script_class_icons={
 "BuffsHolder": "",
 "ButtonChecks": "",
 "CellblockModule": "",
+"Cells": "",
 "Character": "",
 "CharacterArchetype": "",
 "CharacterFlag": "",

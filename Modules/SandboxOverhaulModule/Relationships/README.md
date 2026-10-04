@@ -63,3 +63,12 @@ The Arm and Body Trauma penalties are applied by status effects through BDCC's b
 
 No fight is excluded from injuries: the only fights that could be called tutorials (the intake fight against `rishaIntro`) or sparring (Rush's boxing) do not
 restore their participants afterwards, and there is no battle name or flag that marks a restorative fight.
+
+## Cells (Milestone 4)
+
+See `Cells/Cells.gd`. BDCC's cell blocks are three colour-coded areas (Orange general, Red high security, Lilac sex deviant) with one personal cell room each; there are
+no separate rooms for other inmates, so a cell is a logical home (block plus number, two occupants at most) shown through a directory rather than as separate map rooms.
+Eligible inmates (the player and the dynamic inmates, including inmates who are now slaves) get the first free place, the player first, so the next inmate of the player's block is their cellmate.
+Assignments never reshuffle; removed characters free their place. Inmates settle in around 21:00 and leave around 07:00 with a fixed per-inmate offset of up to 30 minutes.
+Tonight's attendance is recorded as `home` or `away` per inmate (`cell_presence`, valid only for that night): an inmate who settles, or who simply is not spawned, is home; one who is busy, still walking, or kept elsewhere (slavery, SoftSlavery, an enslave quest) is away. An away inmate is tried again every ten minutes; the system only knows home versus away, never where they are. Enslaving or freeing someone never changes their cell. The directory is the "Cell directory" button in each block's hall;
+"Cell info" in the player's cell, and "Cells" in the Me screen, show the player's cell, cellmate and the cells they have learned by asking.

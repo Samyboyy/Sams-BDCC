@@ -4,6 +4,7 @@ class_name SandboxOverhaulModule
 const ExtenderScript = preload("res://Modules/SandboxOverhaulModule/Core/SandboxGameExtender.gd")
 const ConsentScript = preload("res://Modules/SandboxOverhaulModule/Relationships/SexConsent.gd")
 const AftermathScript = preload("res://Modules/SandboxOverhaulModule/Relationships/SexAftermath.gd")
+const CellsScript = preload("res://Modules/SandboxOverhaulModule/Cells/Cells.gd")
 const InjuriesScript = preload("res://Modules/SandboxOverhaulModule/Injuries/Injuries.gd")
 const CombatScript = preload("res://Modules/SandboxOverhaulModule/Relationships/CombatConsequences.gd")
 const ConversationScript = preload("res://Modules/SandboxOverhaulModule/Relationships/ConversationRelationships.gd")
@@ -14,6 +15,14 @@ func _init():
 	
 	gameExtenders = [
 		"res://Modules/SandboxOverhaulModule/Core/SandboxGameExtender.gd",
+	]
+
+	scenes = [
+		"res://Modules/SandboxOverhaulModule/Scenes/CellDirectoryScene.gd",
+	]
+
+	worldEdits = [
+		"res://Modules/SandboxOverhaulModule/WorldEdits/CellsWorldEdit.gd",
 	]
 
 	statusEffects = [
@@ -36,6 +45,11 @@ static func getCombat():
 static func getInjuries():
 	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
 	return extender.getInjuries()
+
+# Cell service. Do not cache it across games; call this each time.
+static func getCells():
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	return extender.getCells()
 
 # Active state. Resets itself when a different game (MainScene) is running.
 static func getState():
@@ -259,3 +273,260 @@ func getLegInjuryScale(characterID) -> float:
 	if(severity <= 0):
 		return 1.0
 	return 1.0 - InjuriesScript.PENALTY_PERCENT[severity] / 100.0
+
+# ---- Cells, cellmates and the nightly routine (see CORE_PATCHES.md) ----
+
+func blockForInmateType(inmateType) -> String:
+	if(inmateType == InmateType.HighSec):
+		return "red"
+	if(inmateType == InmateType.SexDeviant):
+		return "lilac"
+	return "orange"
+
+# Everyone who should have a home cell: the player and the dynamic inmates, including inmates who are now slaves (the Slaves pool, when they are
+# inmates). Slavery can keep someone away from their cell but does not change where they live. Guards, staff and story characters are not in these
+# pools. [[characterID, block], ...]
+func getEligibleCellEntries() -> Array:
+	var entries:Array = []
+	if(GM.main == null || !is_instance_valid(GM.main)):
+		return entries
+	if(GM.pc != null):
+		entries.append(["pc", blockForInmateType(GM.pc.getInmateType())])
+	var candidates:Array = GM.main.getDynamicCharacterIDsFromPool(CharacterPool.Inmates)
+	for slaveID in GM.main.getDynamicCharacterIDsFromPool(CharacterPool.Slaves):
+		var slaveChar = GM.main.getCharacter(slaveID)
+		if(slaveChar != null && slaveChar.isInmate() && !candidates.has(slaveID)):
+			candidates.append(slaveID)
+	for characterID in candidates:
+		var theChar = GM.main.getCharacter(characterID)
+		if(theChar == null || !theChar.isDynamicCharacter()):
+			continue
+		entries.append([characterID, blockForInmateType(theChar.getInmateType())])
+	return entries
+
+# Gives every eligible inmate without a cell the first free place. Safe to call often; nobody who has a cell is ever moved.
+func refreshCells() -> int:
+	return getCells().ensureAssigned(getEligibleCellEntries())
+
+func characterName(characterID) -> String:
+	if(characterID == "pc"):
+		return "You"
+	if(GM.main == null || !is_instance_valid(GM.main)):
+		return str(characterID)
+	var theChar = GM.main.getCharacter(characterID)
+	return theChar.getName() if theChar != null else str(characterID)
+
+# Alone-goals that matter more than bedtime: giving birth, laying eggs, being healed, an ambush, approaching the owner, struggling, slave errands.
+const PRIORITY_GOALS = ["GiveBirth", "LayEggs", "GetHealed", "NemesisAmbush", "NpcOwnerApproach", "Struggle", "SlaveLeave", "SlaveGiveCredits"]
+
+# True when moving this pawn would break something that matters more than bedtime: any interaction except idling (talking, fighting,
+# exhaustion, stocks, slutwall, unconscious, a scripted scene), one of the priority goals above, slavery or ownership, or a quest.
+func isPawnBlocked(pawn) -> bool:
+	if(pawn == null || pawn.isDeleted):
+		return true
+	var interaction = pawn.currentInteraction
+	if(interaction != null && interaction.id != "AloneInteraction"):
+		return true
+	if(interaction != null && interaction.goal != null && PRIORITY_GOALS.has(interaction.goal.id)):
+		return true
+	var theChar = pawn.getChar()
+	if(theChar == null || theChar.isSlaveToPlayer() || theChar.hasEnslaveQuest()):
+		return true
+	if(GM.main.RS.hasSpecialRelationshipID(pawn.charID, "SoftSlavery")):
+		return true
+	return false
+
+# Called by the extender's pcProcessTime hook. Runs the schedule at most once per ten in-game minutes.
+func onScheduleTick() -> void:
+	if(GM.main == null || !is_instance_valid(GM.main) || GM.main.isInDungeon()):
+		return
+	var bucket:int = GM.main.getDays() * 144 + int(GM.main.getTime() / 600)
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	if(extender.scheduleBucket == bucket):
+		return
+	extender.scheduleBucket = bucket
+	var _placed:int = refreshCells()
+	var _result:Dictionary = sweepResidents()
+
+# True when something detectable keeps this inmate away from their cell: the player owns them, they are in SoftSlavery, or they are on an
+# enslave quest. This says nothing about where they are, only that they are not simply unspawned in bed.
+func isKeptElsewhere(characterID) -> bool:
+	var theChar = GM.main.getCharacter(characterID)
+	if(theChar == null):
+		return false
+	return theChar.isSlaveToPlayer() || theChar.hasEnslaveQuest() || GM.main.RS.hasSpecialRelationshipID(characterID, "SoftSlavery")
+
+# Home or away for tonight, "" outside the character's night or without a cell. A recorded state for tonight wins; without one it is worked out
+# now: a pawn that is still out, or a condition that keeps them elsewhere, means away; an inmate who is simply not spawned is assumed home.
+func getAttendance(characterID) -> String:
+	if(GM.main == null || !is_instance_valid(GM.main) || characterID == "pc"):
+		return ""
+	var theCells = getCells()
+	var now:int = GM.main.getTime()
+	if(!theCells.isAssigned(characterID) || !CellsScript.isNight(characterID, now)):
+		return ""
+	var recorded:String = theCells.getPresence(characterID, CellsScript.nightId(characterID, now, GM.main.getDays()))
+	if(recorded != ""):
+		return recorded
+	if(GM.main.IS.hasPawn(characterID) || isKeptElsewhere(characterID)):
+		return "away"
+	return "home"
+
+func recordAttendance(characterID, presence:String) -> void:
+	var night:int = CellsScript.nightId(characterID, GM.main.getTime(), GM.main.getDays())
+	var theCells = getCells()
+	if(theCells.getPresence(characterID, night) != presence):
+		var _ok:bool = theCells.setPresence(characterID, night, presence)
+
+# Sends inmates whose bedtime has come to their cells and records who is home and who is away for the night. A pawn that is busy is left alone,
+# marked away, and tried again at the next tick. A pawn near the player is made tired so BDCC's own "Leave" goal walks it back to its cell block before
+# it disappears (still away until it is gone); everyone else just goes (they are somewhere the player cannot see) and is home. An inmate with no pawn
+# is home unless something keeps them elsewhere. The player is never moved. Attendance of the previous night is dropped.
+# Returns {"despawned": [], "walking": [], "deferred": [], "home": [], "away": []}.
+func sweepResidents() -> Dictionary:
+	var result:Dictionary = {"despawned": [], "walking": [], "deferred": [], "home": [], "away": []}
+	if(GM.main == null || !is_instance_valid(GM.main)):
+		return result
+	var IS = GM.main.IS
+	var theCells = getCells()
+	var now:int = GM.main.getTime()
+	var day:int = GM.main.getDays()
+	# Waking, or a new night, invalidates old attendance.
+	for characterID in theCells.state.cell_presence.keys():
+		if(!theCells.isAssigned(characterID) || !CellsScript.isNight(characterID, now) || theCells.getPresence(characterID, CellsScript.nightId(characterID, now, day)) == ""):
+			theCells.clearPresence(characterID)
+	# Pawns in the player's room, or within two rooms when the map is loaded, are walked home instead of vanishing.
+	var nearIDs:Array = []
+	if(GM.pc != null):
+		nearIDs = IS.getPawnIDsAt(GM.pc.getLocation())
+		if(GM.world != null):
+			nearIDs.append_array(IS.getPawnIDsNear(GM.pc.getLocation(), 2))
+	for characterID in theCells.getAssignedIDs():
+		if(characterID == "pc" || !CellsScript.isNight(characterID, now)):
+			continue
+		var pawn = IS.getPawn(characterID)
+		var presence:String = "home"
+		if(pawn != null):
+			presence = "away"
+			if(isPawnBlocked(pawn)):
+				result["deferred"].append(characterID)
+			elif(nearIDs.has(characterID)):
+				pawn.tiredness = max(pawn.tiredness, 1.5)
+				result["walking"].append(characterID)
+			else:
+				IS.deletePawn(characterID)
+				result["despawned"].append(characterID)
+				presence = "home"
+		elif(isKeptElsewhere(characterID)):
+			presence = "away"
+		recordAttendance(characterID, presence)
+		result[presence].append(characterID)
+	return result
+
+# Used by InteractionSystem.trySpawnPawn so an inmate who should still be in their cell is not picked for a random appearance.
+func canSpawnPawn(characterID) -> bool:
+	if(GM.main == null || !is_instance_valid(GM.main) || !getCells().isAssigned(characterID)):
+		return true
+	return !CellsScript.isNight(characterID, GM.main.getTime())
+
+# Whether the character is in their cell now: the player when they stand in their cell room; an inmate during their night whose attendance is home.
+func isInCell(characterID) -> bool:
+	if(GM.main == null || !is_instance_valid(GM.main)):
+		return false
+	if(characterID == "pc"):
+		return GM.pc != null && GM.pc.getLocation() == GM.pc.getCellLocation()
+	return getAttendance(characterID) == "home"
+
+# For later systems: it is night for this inmate, they have a cell and they are away from it (still walking about, kept busy, or kept elsewhere).
+func hasFailedToReturn(characterID) -> bool:
+	return getAttendance(characterID) == "away"
+
+func getPlayerCell() -> Dictionary:
+	var _placed:int = refreshCells()
+	return getCells().getCell("pc")
+
+func getPlayerCellmate() -> String:
+	var _placed:int = refreshCells()
+	return getCells().getCellmate("pc")
+
+# ---- Text ----
+func presenceText(characterID) -> String:
+	if(isInCell(characterID)):
+		return "in the cell"
+	return "[color=" + CellsScript.COLOR_AWAY + "]not here[/color]"
+
+func occupantText(characterID) -> String:
+	return "[color=" + CellsScript.COLOR_NAME + "]" + characterName(characterID) + "[/color] (" + presenceText(characterID) + ")"
+
+func getMyCellText() -> String:
+	var entry:Dictionary = getPlayerCell()
+	if(entry.empty()):
+		return "[color=" + CellsScript.COLOR_ERROR + "]You have no cell assigned.[/color]"
+	var text:String = "Your cell: " + CellsScript.coloredCellLabel(entry["block"], entry["cell"])
+	var mate:String = getCells().getCellmate("pc")
+	if(mate == ""):
+		text += "\nCellmate: none yet"
+	else:
+		text += "\nCellmate: " + occupantText(mate)
+	return text
+
+func getKnownCellsText() -> String:
+	var _placed:int = refreshCells()
+	var theCells = getCells()
+	var lines:Array = []
+	for targetID in theCells.getKnownTargets("pc"):
+		var entry:Dictionary = theCells.getCell(targetID)
+		if(entry.empty()):
+			continue
+		lines.append("[color=" + CellsScript.COLOR_NAME + "]" + characterName(targetID) + "[/color]: " + CellsScript.coloredCellLabel(entry["block"], entry["cell"]))
+	if(lines.empty()):
+		return "You have not learned anyone else's cell yet. Ask people in conversation."
+	return "Cells you know:\n" + PoolStringArray(lines).join("\n")
+
+func getCellsScreenText() -> String:
+	return getMyCellText() + "\n\n" + getKnownCellsText()
+
+const ROSTER_PAGE_SIZE = 8
+
+func getRosterPageCount(block) -> int:
+	var _placed:int = refreshCells()
+	return int(max(1, ceil(float(getCells().getOccupiedCellsInBlock(block).size()) / float(ROSTER_PAGE_SIZE))))
+
+# The cells on one page of a block's roster: [{"block", "cell", "occupants", "line"}].
+func getRosterPage(block, page:int) -> Array:
+	var _placed:int = refreshCells()
+	var all:Array = getCells().getOccupiedCellsInBlock(block)
+	var result:Array = []
+	for i in range(page * ROSTER_PAGE_SIZE, min(all.size(), (page + 1) * ROSTER_PAGE_SIZE)):
+		var entry:Dictionary = all[i].duplicate()
+		var names:Array = []
+		for occupant in entry["occupants"]:
+			names.append(occupantText(occupant))
+		entry["line"] = CellsScript.coloredCellLabel(entry["block"], entry["cell"]) + ": " + PoolStringArray(names).join(", ") + (" [color=" + CellsScript.COLOR_CELL + "](your cell)[/color]" if entry["occupants"].has("pc") else "")
+		result.append(entry)
+	return result
+
+# The text for looking into one cell: the shared interior, its occupants and whether they are there.
+func getCellViewText(block, cell:int) -> String:
+	var _placed:int = refreshCells()
+	var occupants:Array = getCells().getOccupants(block, cell)
+	var text:String = CellsScript.coloredCellLabel(block, cell) + "\nThe cell is a small metal room with an armored window and an automatic door, a stiff bed and a stool. The same as every other one."
+	if(occupants.empty()):
+		return text + "\nNobody is assigned to it."
+	var names:Array = []
+	for occupant in occupants:
+		names.append(occupantText(occupant))
+	return text + "\nAssigned: " + PoolStringArray(names).join(", ") + (".\nThis is your cell." if occupants.has("pc") else ".")
+
+# What an inmate says when asked which cell they live in. {"found": bool, "line": say text, "note": text for the player}.
+func getCellAnswer(npcID) -> Dictionary:
+	var _placed:int = refreshCells()
+	var entry:Dictionary = getCells().getCell(npcID)
+	if(entry.empty()):
+		return {"found": false, "line": "I don't have a cell like the others do.", "note": ""}
+	return {"found": true, "line": "I'm in " + CellsScript.coloredCellLabel(entry["block"], entry["cell"]) + ".", "note": "[color=yellow]Cell learned:[/color] " + characterName(npcID) + " lives in " + CellsScript.coloredCellLabel(entry["block"], entry["cell"]) + "."}
+
+# The player asks an inmate which cell they live in. Learning it changes nothing else (no relationship points, no cooldown).
+func learnCell(npcID) -> bool:
+	var _placed:int = refreshCells()
+	return getCells().learnCell("pc", npcID)

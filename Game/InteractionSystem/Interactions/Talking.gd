@@ -99,6 +99,11 @@ func init_text():
 			addDisabledAction("Flirt", "They hate you too much..")
 	else:
 		addDisabledAction("Flirt", "They don't seem to be in a flirty mood..")
+	if(getRolePawn("starter").isPlayer() && !getRolePawn("reacter").isPlayer() && GlobalRegistry.getModule("SandboxOverhaulModule") != null):
+		if(getRolePawn("reacter").canSocial() && !isNemesisTo("reacter", "starter")):
+			addAction("ask_cell", "Which cell?", "Ask which cell they live in", "default", 0.0, 30, {})
+		else:
+			addDisabledAction("Which cell?", "They don't seem to be in a chatty mood..")
 	if(getRolePawn("reacter").canGrabAndFuck() && roleCanStartSex("starter")):
 		addAction("grab_and_fuck", "Grab&Fuck", "They have so many restraints that you can just fuck them..", "sexUse", 5.0, 60, {})
 	addAction("attack", "Attack", "Make them regret it!", "attack", 1.0 if (didAmount <= 0 || gotDenied) else 0.1, 30, {})
@@ -175,6 +180,9 @@ func init_do(_id:String, _args:Dictionary, _context:Dictionary):
 		didAmount += 1
 		gotDenied = false
 		setState("about_to_flirt", "starter")
+	if(_id == "ask_cell"):
+		var _learned:bool = GlobalRegistry.getModule("SandboxOverhaulModule").learnCell(getRoleID("reacter"))
+		setState("asked_cell", "starter")
 	if(_id == "grab_and_fuck"):
 		setState("grabbed_about_to_fuck", "reacter")
 	if(_id == "attack"):
@@ -206,6 +214,18 @@ func init_do(_id:String, _args:Dictionary, _context:Dictionary):
 		setState("npcEnslaveOffer", "reacter")
 	if(_id == "enslave_ask_to_be"):
 		setState("npcEnslaveOfferFromPC", "reacter")
+
+func asked_cell_text():
+	var theAnswer:Dictionary = GlobalRegistry.getModule("SandboxOverhaulModule").getCellAnswer(getRoleID("reacter"))
+	saynn("{starter.You} {starter.youVerb('ask')} {reacter.name} which cell {reacter.he} lives in.")
+	saynn("[say=reacter]" + theAnswer["line"] + "[/say]")
+	if(theAnswer["note"] != ""):
+		saynn(theAnswer["note"])
+	addAction("continue", "Continue", "See what happens next..", "default", 1.0, 60, {})
+
+func asked_cell_do(_id:String, _args:Dictionary, _context:Dictionary):
+	if(_id == "continue"):
+		setState("", "starter")
 
 func npcEnslaveOfferFromPC_text():
 	saynn("You ask {reacter.name} if you could become {reacter.his} slave!")

@@ -110,6 +110,8 @@ func _run():
 		addButton("Pronouns", "Pick your pronouns", "pickpronouns")
 		addButton("Encounters", "Info about your previous encounters", "encountersMenu")
 		addButton("Reputation", "Look at your reputation", "reputationMenu")
+		if(GlobalRegistry.getModule("SandboxOverhaulModule") != null):
+			addButton("Cells", "Your cell, your cellmate and the cells you have learned", "cellsMenu")
 		if(!GM.main.isInDungeon()):
 			addButton("Look for trouble", "Try to find an encounter", "lookfortrouble")
 		if(!getFlag("Game_PickedStartingPerks", false)):
@@ -175,6 +177,10 @@ func _run():
 		
 		addButton("Continue", "Oh well", "")
 	
+	if(state == "cellsMenu"):
+		saynn(GlobalRegistry.getModule("SandboxOverhaulModule").getCellsScreenText())
+		addButton("Back", "Go back to the previous menu", "")
+
 	if(state == "reputationMenu"):
 		var reputation:Reputation = GM.pc.getReputation()
 		
