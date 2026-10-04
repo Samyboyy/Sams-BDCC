@@ -179,6 +179,8 @@ func init_do(_id:String, _args:Dictionary, _context:Dictionary):
 		setState("grabbed_about_to_fuck", "reacter")
 	if(_id == "attack"):
 		startInteraction("GenericAttack", {starter=getRoleID("starter"), reacter=getRoleID("reacter")})
+		if(getRolePawn("starter").isPlayer() && !getRolePawn("reacter").isPlayer() && GlobalRegistry.getModule("SandboxOverhaulModule") != null):
+			GlobalRegistry.getModule("SandboxOverhaulModule").onUnprovokedAttack(getRoleID("reacter"))
 		if(!getRolePawn("reacter").isPlayer()):
 			affectAffection("reacter", "starter", -0.25)
 	if(_id == "offersex"):

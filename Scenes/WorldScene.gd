@@ -335,16 +335,16 @@ func _react_scene_end(_tag, _result):
 		var battlestate = _result[0]
 
 		if(battlestate == "win"):
-			sendStatusToInteraction({"won":true})
+			sendStatusToInteraction({"won":true, "how":_result[1] if _result.size() > 1 else "", "margin":_result[2] if _result.size() > 2 else -1.0, "submitter":_result[3] if _result.size() > 3 else ""})
 		else:
-			sendStatusToInteraction({"won":false})
+			sendStatusToInteraction({"won":false, "how":_result[1] if _result.size() > 1 else "", "margin":_result[2] if _result.size() > 2 else -1.0, "submitter":_result[3] if _result.size() > 3 else ""})
 	if(_tag == "interaction_fight_pcdef"):
 		var battlestate = _result[0]
 
 		if(battlestate == "win"):
-			sendStatusToInteraction({"won":false})
+			sendStatusToInteraction({"won":false, "how":_result[1] if _result.size() > 1 else "", "margin":_result[2] if _result.size() > 2 else -1.0, "submitter":_result[3] if _result.size() > 3 else ""})
 		else:
-			sendStatusToInteraction({"won":true})
+			sendStatusToInteraction({"won":true, "how":_result[1] if _result.size() > 1 else "", "margin":_result[2] if _result.size() > 2 else -1.0, "submitter":_result[3] if _result.size() > 3 else ""})
 
 func shouldDisplayBigButtons():
 	var pawn:CharacterPawn = GM.main.IS.getPawn("pc")

@@ -21,6 +21,12 @@ func init_text():
 	addAction("fight", "Fight", "Fight back", "fight", 1.0, 300, {start_fight=["starter", "reacter"],})
 	addAction("surrender", "Surrender", "It's not worth it!", "surrender", 1.0, 60, {})
 
+# Sandbox overhaul: the player voluntarily surrendered before any fight (see CORE_PATCHES.md).
+func sandboxPlayerSurrender(surrenderingRole:String, otherRole:String):
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && getRolePawn(surrenderingRole).isPlayer() && !getRolePawn(otherRole).isPlayer()):
+		sandboxModule.onPlayerSurrender(self, getRoleID(otherRole))
+
 func init_do(_id:String, _args:Dictionary, _context:Dictionary):
 	if(_id == "fight"):
 		surrendered = false
@@ -35,6 +41,7 @@ func init_do(_id:String, _args:Dictionary, _context:Dictionary):
 			sendSocialEvent("reacter", "starter", SocialEventType.LostFight)
 	if(_id == "surrender"):
 		surrendered = true
+		sandboxPlayerSurrender("reacter", "starter")
 		setState("starter_won", "starter")
 		onStarterWin(true)
 

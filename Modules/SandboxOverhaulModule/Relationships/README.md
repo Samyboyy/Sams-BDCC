@@ -34,3 +34,11 @@ Neutral exchanges and refused sex requests change nothing. Fear is never changed
 RelationshipSystem, temporary while Friend, Nemesis and AI still read it. A rewarding outcome is paid once per in-game day per
 NPC, target and outcome in both systems (`SandboxState.cooldowns`, keys starting `conv|`); negative outcomes are never limited.
 `hostile_response` exists but no current Talking outcome produces it.
+
+## Combat (Milestone 2)
+
+`CombatConsequences` keeps two prison-wide values in `SandboxState.reputation` (both -100..100, start 0): Combat Reputation (perceived fighting
+ability) and Defiance (perceived willingness to resist). Individual NPCs keep their own Fear and Respect towards the player in the directed
+store. Outcomes and numbers are in the `RULES` table; the first outcome against an NPC each in-game day is full strength, later ones are
+25% personal change and 25% Defiance, with no more Combat Reputation. NPC attack interest is multiplied by the Combat Reputation and Fear multipliers (never below 0.05),
+and punishments after a lost fight are weighted 1.25x if the player resisted, 0.65x if they surrendered.

@@ -10,6 +10,7 @@ var involvedPawns:Dictionary = {} # Role = ID
 var currentPawn:String = "" # Role
 var directedToPawn:String = "" # Role
 var state:String = ""
+var sandboxDefeatKind:String = "" # "", "resisted" or "surrendered": how the player lost a fight in this interaction
 
 var charIDToRole:Dictionary = {} # ID = Role
 
@@ -111,6 +112,10 @@ func calcFinalActionScore(actionEntry:Dictionary) -> float:
 	var scoreType = actionEntry["scoreType"] if actionEntry.has("scoreType") else "default"
 	
 	var theFinalScore:float = score * getScoreTypeValue(scoreType)
+	if((scoreType == "punish" || scoreType == "punishMean") && sandboxDefeatKind != ""):
+		var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+		if(sandboxModule != null):
+			theFinalScore *= sandboxModule.getDefeatPunishMultiplier(sandboxDefeatKind)
 	actionEntry["finalScore"] = theFinalScore
 	return theFinalScore
 
@@ -455,6 +460,10 @@ func getScoreTypeValueGenericInternal(_scoreType:String, curPawn:CharacterPawn, 
 		finalScore -= affection
 		finalScore += meanness
 		finalScore = max(anger, finalScore)
+		if(finalScore > 0.0 && dirToPawn.isPlayer()):
+			var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+			if(sandboxModule != null):
+				finalScore *= sandboxModule.getAttackMultiplier(curID)
 		return finalScore
 	elif(_scoreType == "agreeSexAsSub"):
 		var affection:float = GM.main.RS.getAffection(curID, dirToID)
@@ -813,6 +822,9 @@ func getFightResult(_args:Dictionary):
 func doFightAftermath(_fightersData, newResult):
 	var wonPawn = getRolePawn(_fightersData[0 if newResult["won"] else 1])
 	var lostPawn = getRolePawn(_fightersData[1 if newResult["won"] else 0])
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && wonPawn != null && lostPawn != null):
+		sandboxModule.onFightAftermath(self, wonPawn.charID, lostPawn.charID, newResult)
 	if(wonPawn != null):
 		wonPawn.afterWonFight()
 		
@@ -1967,6 +1979,7 @@ func saveData():
 		"ws": isWaitingScene,
 		"cLD": cachedLastDir,
 		"wD": wasDeleted,
+		"sdk": sandboxDefeatKind,
 	}
 	if(sexResult):
 		data["sr"] = sexResult.saveData()
@@ -1990,6 +2003,7 @@ func loadData(_data):
 	isWaitingScene = SAVE.loadVar(_data, "ws", false)
 	cachedLastDir = SAVE.loadVar(_data, "cLD", -1)
 	wasDeleted = SAVE.loadVar(_data, "wD", false)
+	sandboxDefeatKind = SAVE.loadVar(_data, "sdk", "")
 	if(_data.has("sr")):
 		sexResult = SexEngineResult.new()
 		sexResult.loadData(SAVE.loadVar(_data, "sr", {}))

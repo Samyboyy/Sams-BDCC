@@ -8,6 +8,9 @@ var whatEnemyDid: String = ""
 var whatHappened: String = ""
 var battleState = ""
 var battleEndedHow = ""
+var battleMargin:float = -1.0 # winner damage fraction, see CombatConsequences
+var battleSubmitter = "" # "pc" if the player pressed Submit, "enemy" if the enemy surrendered
+var sandboxReported = false
 var savedAIAttackID = ""
 var battleName = ""
 var currentAttackerID = ""
@@ -480,11 +483,14 @@ func _react(_action: String, _args):
 		setState("lost")
 		whatHappened = "You give up the fight willingly and submit to your enemy\n"
 		battleState = "lost"
+		battleEndedHow = "submit"
+		battleSubmitter = "pc"
 		playAnimation(StageScene.Solo, "kneel")
 		onPCSubmit()
 		return
 	
 	if(_action == "endbattle"):
+		sandboxFightEnded()
 		if(restraintIdsForcedByPC.size() > 0 && _args.size() > 0 && _args[0]):
 			#var recoverChance = GM.pc.getBuffsHolder().getCustom(BuffAttribute.RestraintRecovery) * 100.0
 			
@@ -531,9 +537,9 @@ func _react(_action: String, _args):
 			if((loot.has("credits") && loot["credits"] > 0) || (loot.has("items") && loot["items"].size() > 0)):
 				runScene("LootingScene", [loot], "lootingscene")
 			else:
-				endScene([battleState, battleEndedHow])
+				endScene([battleState, battleEndedHow, battleMargin, battleSubmitter])
 		else:
-			endScene([battleState, battleEndedHow])
+			endScene([battleState, battleEndedHow, battleMargin, battleSubmitter])
 		return
 	
 	if(_action == "doLustAction"):
@@ -878,6 +884,18 @@ func afterTurnChecks():
 		setState("win")
 		onPCWin()
 
+# Sandbox overhaul (see CORE_PATCHES.md): measures how hurt the winner is (larger of pain and lust as a fraction of their
+# threshold) and reports Fight Club arena fights once. Interaction fights are reported by doFightAftermath instead.
+func sandboxFightEnded():
+	var theWinner = enemyCharacter if battleState == "lost" else GM.pc
+	battleMargin = max(float(theWinner.getPain()) / max(1.0, float(theWinner.painThreshold())), float(theWinner.getLust()) / max(1.0, float(theWinner.lustThreshold())))
+	if(sandboxReported):
+		return
+	sandboxReported = true
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null):
+		sandboxModule.onFightSceneEnded(enemyID, battleState, battleSubmitter, battleName)
+
 func onPCWin():
 	SexToyManager.sendTrigger(SexToyTrigger.OnFightWin)
 
@@ -894,6 +912,7 @@ func checkEnd():
 		whatHappened += "Enemy surrendered, you win the fight\n"
 		battleState = "win"
 		battleEndedHow = "surrendered"
+		battleSubmitter = "enemy"
 		return "win"
 	if(enemyCharacter.getPain() >= enemyCharacter.painThreshold()):
 		if(whatHappened != ""):
@@ -1008,7 +1027,7 @@ func _react_scene_end(_tag, _result):
 		afterTurnChecks()
 		
 	if(_tag == "lootingscene"):
-		endScene([battleState, battleEndedHow])
+		endScene([battleState, battleEndedHow, battleMargin, battleSubmitter])
 
 func supportsBattleTurns():
 	return true

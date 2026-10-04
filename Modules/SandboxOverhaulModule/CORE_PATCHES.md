@@ -69,3 +69,23 @@ exists (Module registration, GameExtender hooks, InteractionGoal, etc.).
 - **Compatibility risk:** Low. Without the module nothing changes. `CharacterPawn.affectAffection` and `affectLust` are untouched, so every
   other caller keeps its legacy messages.
 - **Reapply after upstream update:** Re-add the helpers and the guarded calls in `Talking.gd`, and the two optional parameters.
+
+
+### 5. Combat outcomes, surrender and combat reputation (Milestone 2)
+
+All hooks call `GlobalRegistry.getModule("SandboxOverhaulModule")` and do nothing when it is absent, so vanilla behaviour is unchanged.
+
+- **`Scenes/FightScene.gd`**
+  - `submit` action: sets `battleEndedHow = "submit"` (it used to stay empty and became `"pain"` at the end) and the new `battleSubmitter = "pc"`. When the enemy surrenders, `checkEnd` sets `battleSubmitter = "enemy"`. Existing readers only compare `"lust"` on a win.
+  - `endbattle` action calls the new `sandboxFightEnded()`: it measures how hurt the winner is into `battleMargin` (larger of pain and lust as a fraction of the threshold) and, once per scene (`sandboxReported`), calls `onFightSceneEnded`, which acts only on Fight Club `"arenafight"` fights. This is the real Fight Club hook: every arena scene (`AvyTalkScene`, `AvyFirstArenaBattleScene`, `AvyFinalArenaBattleScene`) runs `FightScene` with the battle name `"arenafight"` and ends through `endbattle`.
+  - The three `endScene([battleState, battleEndedHow])` calls now also pass `battleMargin` and `battleSubmitter`.
+- **`Scenes/WorldScene.gd` `_react_scene_end`:** the fight results sent to the interaction also carry `how`, `margin` and `submitter`.
+- **`Game/InteractionSystem/PawnInteractionBase.gd`**
+  - New var `sandboxDefeatKind` (saved as `"sdk"`): how the player lost, `""`, `"resisted"` or `"surrendered"`.
+  - `doFightAftermath`: calls `onFightAftermath` (only fights with the player count).
+  - `getScoreTypeValueGenericInternal`, `"attack"` score: multiplied once by the module's attack multiplier when the target is the player.
+  - `calcFinalActionScore`: `"punish"` and `"punishMean"` scores are multiplied by 1.25 after a resisted loss or 0.65 after a surrender.
+- **`Game/InteractionSystem/Interactions/GenericAttack.gd` and `CaughtOffLimits.gd`:** the player's own "Surrender" choice calls `onPlayerSurrender`. An NPC surrendering changes nothing.
+- **`Game/InteractionSystem/Interactions/Talking.gd` `init_do`:** the player starting an attack calls `onUnprovokedAttack`.
+- **`Scenes/MeScene.gd` reputation menu:** shows the Combat Reputation and Defiance values, their bands and a one-line definition each.
+- **Not changed:** BDCC inmate reputation, Fight Club's own systems, `LostFight` social events, Nemesis, scripted and quest fights.

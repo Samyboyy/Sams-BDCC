@@ -213,6 +213,12 @@ func _run():
 				sayn("(You have reached the lowest reputation level possible)")
 			sayn("")
 		
+		var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+		if(sandboxModule != null):
+			sayn("[b]Combat[/b]")
+			sayn(sandboxModule.getReputationText())
+			sayn("")
+
 		addButton("Back", "Go back to the previous menu", "")
 
 func onMinigameTest(_score:MinigameResult):

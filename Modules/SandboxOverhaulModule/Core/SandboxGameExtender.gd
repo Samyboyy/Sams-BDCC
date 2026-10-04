@@ -6,14 +6,17 @@ const StateScript = preload("res://Modules/SandboxOverhaulModule/Core/SandboxSta
 
 var state = StateScript.new()
 const ConversationScript = preload("res://Modules/SandboxOverhaulModule/Relationships/ConversationRelationships.gd")
+const CombatScript = preload("res://Modules/SandboxOverhaulModule/Relationships/CombatConsequences.gd")
 const RelationshipsScript = preload("res://Modules/SandboxOverhaulModule/Relationships/DirectedRelationships.gd")
 
 var relationships
+var combat
 var ownerMainId: int = 0 # instance id of the MainScene the state belongs to (ids are never reused, pointers can be)
 
 func _init():
 	id = EXTENDER_ID
 	relationships = RelationshipsScript.new(state)
+	combat = CombatScript.new(state, relationships)
 
 func register(_GES: GameExtenderSystem):
 	_GES.register(self, ExtendGame.saveLoadData)
@@ -32,6 +35,11 @@ func getRelationships():
 	var _state = getState() # applies the new-game reset
 	return relationships
 
+# Combat reputation service, same lifetime rules as getRelationships.
+func getCombat():
+	var _state = getState()
+	return combat
+
 # Drops characters that definitely no longer exist. Does nothing without a live MainScene.
 func pruneMissingCharacters():
 	if(GM.main == null || !is_instance_valid(GM.main)):
@@ -42,6 +50,9 @@ func pruneMissingCharacters():
 	for characterID in ConversationScript.getCooldownCharacterIDs(state.cooldowns):
 		if(characterID != "pc" && GM.main.getCharacter(characterID) == null):
 			ConversationScript.removeCooldownsOf(state.cooldowns, characterID)
+	for characterID in CombatScript.getCooldownCharacterIDs(state.cooldowns):
+		if(characterID != "pc" && GM.main.getCharacter(characterID) == null):
+			CombatScript.removeCooldownsOf(state.cooldowns, characterID)
 
 func saveData():
 	var theState = getState()

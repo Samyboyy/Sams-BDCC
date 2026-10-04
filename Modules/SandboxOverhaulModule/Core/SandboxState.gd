@@ -14,6 +14,8 @@ var cell_assignments: Dictionary = {}
 var gang_state: Dictionary = {}
 var obligations: Array = []
 var cooldowns: Dictionary = {}
+# Prison-wide combat reputation, both -100..100 (see CombatConsequences).
+var reputation: Dictionary = {"combat": 0.0, "defiance": 0.0}
 
 const DICT_FIELDS = ["npc_profiles", "directed_relationships", "major_memories", "knowledge", "cell_assignments", "gang_state", "cooldowns"]
 
@@ -22,6 +24,7 @@ func clear():
 	for field in DICT_FIELDS:
 		set(field, {})
 	obligations = []
+	reputation = {"combat": 0.0, "defiance": 0.0}
 
 # Safe getters: missing entries return defaults, never null.
 func getNpcProfile(charID: String) -> Dictionary:
@@ -46,7 +49,7 @@ func getCooldown(key: String, default = 0):
 	return cooldowns.get(key, default)
 
 func saveData() -> Dictionary:
-	var data = {"schema_version": schema_version, "obligations": obligations.duplicate(true)}
+	var data = {"schema_version": schema_version, "obligations": obligations.duplicate(true), "reputation": reputation.duplicate(true)}
 	for field in DICT_FIELDS:
 		data[field] = get(field).duplicate(true)
 	return data
@@ -65,6 +68,7 @@ func loadData(data) -> void:
 		if(value is Dictionary):
 			set(field, value.duplicate(true))
 	directed_relationships = sanitizeRelationships(data.get("directed_relationships"))
+	reputation = sanitizeReputation(data.get("reputation"))
 	var loadedObligations = data.get("obligations")
 	if(loadedObligations is Array):
 		obligations = loadedObligations.duplicate(true)
@@ -101,6 +105,16 @@ func sanitizeRelationships(raw) -> Dictionary:
 			if(!result.has(observerID)):
 				result[observerID] = {}
 			result[observerID][targetID] = pair
+	return result
+
+# Both values default to 0; anything non-numeric is ignored and numbers are clamped to -100..100.
+func sanitizeReputation(raw) -> Dictionary:
+	var result:Dictionary = {"combat": 0.0, "defiance": 0.0}
+	if(!(raw is Dictionary)):
+		return result
+	for key in result:
+		if(raw.has(key) && AxisScript.isNumber(raw[key])):
+			result[key] = clamp(float(raw[key]), -100.0, 100.0)
 	return result
 
 # Step upgrades one version at a time. Add `if(schema_version == N): ...; schema_version = N+1` blocks.
