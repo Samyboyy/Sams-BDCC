@@ -864,8 +864,13 @@ func doSexAftermath(_sexData, theSexResult:SexEngineResult):
 	var averageSatisfaction:float = theSexResult.getAverageSatisfaction()
 	
 	if(domPawn != null && subPawn != null):
-		affectAffection(_sexData[0], _sexData[1], (min(domSatisfaction, subSatisfaction) - 0.5)*0.4)
-		affectLust(_sexData[0], _sexData[1], (averageSatisfaction - 0.5)*0.5)
+		var runVanillaRelationshipAftermath:bool = true
+		var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+		if(sandboxModule != null):
+			runVanillaRelationshipAftermath = sandboxModule.applySexAftermathAndShouldRunVanilla(self, _sexData, theSexResult)
+		if(runVanillaRelationshipAftermath):
+			affectAffection(_sexData[0], _sexData[1], (min(domSatisfaction, subSatisfaction) - 0.5)*0.4)
+			affectLust(_sexData[0], _sexData[1], (averageSatisfaction - 0.5)*0.5)
 		
 		#if(sexType in [SexType.StocksSex, SexType.SlutwallSex]):
 		#	subPawn.addRepScore(RepStat.Alpha, -domSatisfaction * 0.5)

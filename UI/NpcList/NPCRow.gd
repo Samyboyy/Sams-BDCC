@@ -35,6 +35,13 @@ func setRelationShipData(newAff:float, newLust:float):
 	affection = newAff
 	lust = newLust
 	
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && _npcID != null):
+		# Sandbox overhaul: show the NPC's directed feelings towards the player instead of the legacy shared values.
+		relationship.text = sandboxModule.getFeelingsText(_npcID, "pc")
+		relationship.hint_tooltip = sandboxModule.getFeelingsTooltip()
+		relationship.mouse_filter = Control.MOUSE_FILTER_STOP
+		return
 	relationship.text = "Affection: "+str(Util.roundF(affection*100.0, 1))+"%\n"
 	relationship.text += "Lust: "+str(Util.roundF(lust*100.0, 1))+"%"
 

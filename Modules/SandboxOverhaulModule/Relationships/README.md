@@ -16,4 +16,12 @@ Defaults are 0. The axes are independent, and A to B is stored separately from B
 Pairs whose recognised axes are all at default are not stored. Unknown per-pair keys are preserved.
 Characters that no longer exist (`GM.main.getCharacter(id)` is null; `"pc"` is always kept) are pruned just before saving.
 
-No gameplay event reads or writes these values yet. BDCC's own `RelationshipSystem` (shared affection and lust) is untouched and unrelated.
+Only the sex aftermath (below) writes these values so far. BDCC's own `RelationshipSystem` (shared affection and lust) still drives Friend, Nemesis and AI.
+
+## Sex aftermath (Milestone 1C)
+
+`SexConsent.classify(interactionID, stateID)` decides how an encounter started from the interaction and its state only
+(never arousal, satisfaction, fetishes or personality). `SexAftermath` holds the tuning table and applies it:
+consensual changes the NPC participants' feelings towards their partner; coerced or forced changes the NPC victim's feelings
+towards the responsible character (affection, trust, fear; never desire or respect). The player's own feelings are never stored.
+Unlisted interactions are `UNKNOWN` and change nothing. Hook: `PawnInteractionBase.doSexAftermath` (see `CORE_PATCHES.md`).

@@ -45,7 +45,13 @@ func init_text():
 			sayLine("reacter", "TalkStartNemesis", {main="reacter", target="starter"})
 	else:
 		saynn("{starter.name} is standing near {reacter.you}.")
-	saynn("{reacter.Your} affection with {starter.you} is "+getAffectionString("starter", "reacter")+".\nLust is "+getLustString("starter", "reacter")+".")
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null):
+		var feelingRole:String = "starter" if getRolePawn("reacter").isPlayer() else "reacter"
+		var otherRole:String = "reacter" if feelingRole == "starter" else "starter"
+		saynn("{"+feelingRole+".Your} feelings about {"+otherRole+".you}: "+sandboxModule.getFeelingsSummary(getRoleID(feelingRole), getRoleID(otherRole))+".")
+	else:
+		saynn("{reacter.Your} affection with {starter.you} is "+getAffectionString("starter", "reacter")+".\nLust is "+getLustString("starter", "reacter")+".")
 
 	if(!theStarter.isGagged() && getRolePawn("reacter").canSocial()):
 		if(!isNemesisTo("reacter", "starter")):

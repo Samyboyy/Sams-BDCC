@@ -1620,6 +1620,16 @@ _global_script_classes=[ {
 "path": "res://Game/SexEngine/SexActivityTag.gd"
 }, {
 "base": "Object",
+"class": "SexAftermath",
+"language": "GDScript",
+"path": "res://Modules/SandboxOverhaulModule/Relationships/SexAftermath.gd"
+}, {
+"base": "Object",
+"class": "SexConsent",
+"language": "GDScript",
+"path": "res://Modules/SandboxOverhaulModule/Relationships/SexConsent.gd"
+}, {
+"base": "Object",
 "class": "SexCumSpecialCase",
 "language": "GDScript",
 "path": "res://Game/SexEngine/Util/SexCumSpecialCase.gd"
@@ -2387,6 +2397,8 @@ _global_script_class_icons={
 "SexActIntensity": "",
 "SexActivityBase": "",
 "SexActivityTag": "",
+"SexAftermath": "",
+"SexConsent": "",
 "SexCumSpecialCase": "",
 "SexDomInfo": "",
 "SexEngine": "",
