@@ -8,6 +8,8 @@ const CellsScript = preload("res://Modules/SandboxOverhaulModule/Cells/Cells.gd"
 const InjuriesScript = preload("res://Modules/SandboxOverhaulModule/Injuries/Injuries.gd")
 const CombatScript = preload("res://Modules/SandboxOverhaulModule/Relationships/CombatConsequences.gd")
 const ConversationScript = preload("res://Modules/SandboxOverhaulModule/Relationships/ConversationRelationships.gd")
+const EmploymentScript = preload("res://Modules/SandboxOverhaulModule/Work/Employment.gd")
+const UpgradesScript = preload("res://Modules/SandboxOverhaulModule/Cells/CellUpgrades.gd")
 
 func _init():
 	id = "SandboxOverhaulModule"
@@ -19,10 +21,14 @@ func _init():
 
 	scenes = [
 		"res://Modules/SandboxOverhaulModule/Scenes/CellDirectoryScene.gd",
+		"res://Modules/SandboxOverhaulModule/Scenes/JobBoardScene.gd",
+		"res://Modules/SandboxOverhaulModule/Scenes/WorkShiftScene.gd",
+		"res://Modules/SandboxOverhaulModule/Scenes/CellUpgradesScene.gd",
 	]
 
 	worldEdits = [
 		"res://Modules/SandboxOverhaulModule/WorldEdits/CellsWorldEdit.gd",
+		"res://Modules/SandboxOverhaulModule/WorldEdits/WorkWorldEdit.gd",
 	]
 
 	statusEffects = [
@@ -50,6 +56,16 @@ static func getInjuries():
 static func getCells():
 	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
 	return extender.getCells()
+
+# Employment service. Do not cache it across games; call this each time.
+static func getEmployment():
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	return extender.getEmployment()
+
+# Cell upgrade and storage service. Do not cache it across games; call this each time.
+static func getUpgrades():
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	return extender.getUpgrades()
 
 # Active state. Resets itself when a different game (MainScene) is running.
 static func getState():
@@ -530,3 +546,251 @@ func getCellAnswer(npcID) -> Dictionary:
 func learnCell(npcID) -> bool:
 	var _placed:int = refreshCells()
 	return getCells().learnCell("pc", npcID)
+
+# ---- Work, money and cell upgrades (see CORE_PATCHES.md) ----
+
+# Interactions that hold the player somewhere against their will, with the reason shown when a shift is excused.
+const BLOCKING_INTERACTIONS = {
+	"InStocks": "locked in the stocks", "InSlutwall": "locked in a slutwall", "Unconscious": "unconscious", "NurseSave": "being treated after collapsing",
+	"InNpcOwnerEvent": "kept busy by your owner", "CaughtOffLimits": "held by a guard", "FightExhaustion": "recovering after a lost fight",
+	"PunishInteraction": "being punished", "NemesisAmbush": "caught in an ambush",
+}
+
+func isMainReady() -> bool:
+	return GM.main != null && is_instance_valid(GM.main) && GM.pc != null
+
+# "" when nothing detectable keeps the player from going to work right now, otherwise the reason. This is a snapshot of the present moment: BDCC keeps
+# no history of where the player was, so it can only be asked when the shift is found overdue (see CORE_PATCHES.md and the Work README).
+func getBlockedReason() -> String:
+	if(!isMainReady()):
+		return ""
+	if(GM.main.PS != null):
+		return "serving as a slave"
+	if(GM.main.RS != null):
+		for ownerID in GM.main.RS.special:
+			if(GM.pc.isSlaveTo(ownerID)):
+				return "owned by " + characterName(ownerID)
+	for scene in GM.main.sceneStack:
+		if(scene.sceneID == "NpcOwnerEventRunnerScene"):
+			return "kept busy by your owner"
+	if(GM.main.IS != null && GM.main.IS.hasPawn("pc")):
+		var interaction = GM.main.IS.getPawn("pc").currentInteraction
+		if(interaction != null && BLOCKING_INTERACTIONS.has(interaction.id)):
+			return BLOCKING_INTERACTIONS[interaction.id]
+	return ""
+
+# Called by the extender's pcProcessTime hook: reminders, missed and excused shifts, dismissals.
+func onWorkTick() -> void:
+	if(!isMainReady() || GM.main.isInDungeon()):
+		return
+	var employment = getEmployment()
+	var day:int = GM.main.getDays()
+	var timeOfDay:int = GM.main.getTime()
+	var blocked:String = getBlockedReason() if employment.isShiftOverdue(day, timeOfDay) else ""
+	for event in employment.tick(day, timeOfDay, blocked):
+		GM.main.addMessage(EmploymentScript.eventText(event))
+
+func getWorkScreenText() -> String:
+	if(!isMainReady()):
+		return ""
+	return getEmployment().getStatusText(GM.main.getDays(), GM.main.getTime())
+
+# True when the player has a job and already worked their shift today.
+func isShiftCompleteToday() -> bool:
+	return isMainReady() && getEmployment().isShiftCompleteToday(GM.main.getDays())
+
+# For other modules: the player could not go to work for a reason of theirs (say they were held somewhere). Excuses today's pending shift: no wage, no warning.
+func recordExcusedAbsence(reason:String = "") -> bool:
+	if(!isMainReady()):
+		return false
+	var excused:bool = getEmployment().recordExcused(GM.main.getDays())
+	if(excused):
+		GM.main.addMessage(EmploymentScript.eventText({"type": "excused", "job": getEmployment().getJobID(), "reason": reason if reason != "" else "something kept you away"}))
+	return excused
+
+# A copy of the work state: job, today's shift, warnings and history.
+func getEmploymentState() -> Dictionary:
+	return getState().work.duplicate(true)
+
+# Takes a job from the board. Returns the service result {"ok", "reason"}.
+func acceptJob(jobID) -> Dictionary:
+	if(!isMainReady()):
+		return {"ok": false, "reason": "Not in a game."}
+	return getEmployment().accept(jobID, GM.main.getDays(), GM.main.getTime())
+
+func leaveJob() -> bool:
+	return isMainReady() && getEmployment().leave(GM.main.getDays())
+
+# Starts and finishes today's shift: checks the window, takes the stamina and the wage in one go. Returns {"ok", "reason", "wage", "balance", "job"}.
+# The caller then passes the shift time. The result is recorded before the time passes so the clock cannot mark the shift as missed.
+func startShift(jobID) -> Dictionary:
+	if(!isMainReady()):
+		return {"ok": false, "reason": "Not in a game."}
+	var employment = getEmployment()
+	var day:int = GM.main.getDays()
+	var timeOfDay:int = GM.main.getTime()
+	var check:Dictionary = employment.canStartShift(jobID, day, timeOfDay)
+	if(!check["ok"]):
+		return check
+	if(GM.pc.getStamina() <= 0):
+		return {"ok": false, "reason": "You are too tired to work. Rest first."}
+	var wage:int = employment.completeShift(jobID, day, timeOfDay)
+	if(wage <= 0):
+		return {"ok": false, "reason": "You have no shift to do today."}
+	GM.pc.addCredits(wage)
+	GM.pc.addStamina(-int(EmploymentScript.JOBS[jobID]["stamina"]))
+	return {"ok": true, "reason": "", "wage": wage, "balance": GM.pc.getCredits(), "job": jobID}
+
+# The vanilla mining credit, paid once a day. Called by WorkInMinesScene: later sessions the same day still mine but earn nothing.
+func getInformalMiningPay() -> int:
+	if(!isMainReady()):
+		return 1
+	return 1 if getEmployment().claimInformalMiningPay(GM.main.getDays()) else 0
+
+# ---- Cell upgrades and storage ----
+
+func getPurchasedUpgrades() -> Dictionary:
+	return getUpgrades().getOwned()
+
+# Buys an upgrade: checks the credits, charges the price once and marks it owned in the same step. Returns {"ok", "reason"}.
+func buyUpgrade(upgradeID) -> Dictionary:
+	if(!isMainReady()):
+		return {"ok": false, "reason": "Not in a game."}
+	var upgrades = getUpgrades()
+	var check:Dictionary = upgrades.canBuy(upgradeID, GM.pc.getCredits())
+	if(!check["ok"]):
+		return check
+	GM.pc.addCredits(-UpgradesScript.price(upgradeID))
+	var _owned:bool = upgrades.markOwned(upgradeID)
+	return {"ok": true, "reason": ""}
+
+# The vanilla pillow stash: BDCC's "playerstash" character inventory. Null without a running game.
+func getStash():
+	if(!isMainReady()):
+		return null
+	var stashCharacter = GM.main.getCharacter("playerstash")
+	return stashCharacter.getInventory() if stashCharacter != null else null
+
+func getStashUsed() -> int:
+	var stash = getStash()
+	return stash.getAllItems().size() if stash != null else 0
+
+func getStashStatusText() -> String:
+	return getUpgrades().stashStatusText(getStashUsed())
+
+func itemRecord(item) -> Dictionary:
+	return {"id": item.id, "uniqueID": item.uniqueID, "data": item.saveData()}
+
+# Ordinary (the real pillow stash, as copies of its items' saved data) or hidden (the compartment) contents.
+func getStoredRecords(hidden:bool) -> Array:
+	if(hidden):
+		return getUpgrades().getRecords()
+	var records:Array = []
+	var stash = getStash()
+	if(stash != null):
+		for item in stash.getAllItems():
+			records.append(itemRecord(item))
+	return records
+
+# Why an item cannot go into storage, "" when it can. The rule: the item sits loose in the player's own inventory (BDCC keeps worn items in the equipped slots, so a
+# loose restraint is just an item and is allowed, smart lock and all, since its saved data round-trips), is not worn or attached, and is not important or persistent.
+# The work credits the stash scene offers are not an inventory item and skip the carrying checks.
+func getStoreRefusal(item) -> String:
+	if(item == null || !isMainReady()):
+		return "There is nothing to store."
+	if(item.id != "WorkCredit"):
+		var inventory = GM.pc.getInventory()
+		if(inventory.getEquippedItems().values().has(item)):
+			return "You are wearing it. Take it off first."
+		if(!inventory.hasItem(item)):
+			return "You are not carrying it."
+		if(item.isWornByWearer()):
+			return "It is attached to someone. Take it off first."
+		if(item.isImportant()):
+			return "It is too important to put away."
+		if(item.isPersistent()):
+			return "It cannot be put away."
+	if(item.uniqueID == null || !(item.uniqueID is String) || item.uniqueID == ""):
+		return "It cannot be put away."
+	if(GlobalRegistry.getItemRef(item.id) == null):
+		return "It cannot be put away."
+	return ""
+
+# Whether the pillow stash takes this item: the general rules plus the capacity (4 stacks, 12 with the locker). Used by PlayerStashScene
+# and the cell upgrade screen, so both enforce the same rule. A stack that merges into one already there needs no room.
+func getStashDepositRefusal(item) -> String:
+	var reason:String = getStoreRefusal(item)
+	if(reason != ""):
+		return reason
+	var stash = getStash()
+	if(stash == null):
+		return "There is no stash here."
+	var merges:bool = item.canCombine() && stash.hasItemID(item.id)
+	return getUpgrades().stashRefusal(stash.getAllItems().size(), !merges)
+
+# Why an item cannot go into the chosen store, "" when it can.
+func getDepositRefusal(item, hidden:bool) -> String:
+	if(!hidden):
+		return getStashDepositRefusal(item)
+	var reason:String = getStoreRefusal(item)
+	if(reason != ""):
+		return reason
+	return getUpgrades().canStore(itemRecord(item))
+
+# Moves a carried item into the chosen store with all of its data. Returns "" on success or the reason it was refused (nothing moves then).
+func depositItem(item, hidden:bool) -> String:
+	var reason:String = getDepositRefusal(item, hidden)
+	if(reason != ""):
+		return reason
+	if(hidden):
+		reason = getUpgrades().store(itemRecord(item))
+		if(reason != ""):
+			return reason
+		var _removed = GM.pc.getInventory().removeItem(item)
+		return ""
+	var _taken = GM.pc.getInventory().removeItem(item)
+	getStash().addItem(item)
+	return ""
+
+# Moves a stored item back to the player, rebuilt from its data (hidden) or the very same object (stash). Returns "" on success or the reason.
+func withdrawItem(uniqueID:String, hidden:bool) -> String:
+	if(!isMainReady()):
+		return "Not in a game."
+	if(!hidden):
+		var stash = getStash()
+		var item = stash.getItemByUniqueID(uniqueID) if stash != null else null
+		if(item == null):
+			return "It is not in there."
+		var _removed = stash.removeItem(item)
+		if(item.id == "WorkCredit"):
+			GM.pc.addCredits(item.getAmount())
+		else:
+			GM.pc.getInventory().addItem(item)
+		return ""
+	var upgrades = getUpgrades()
+	var record:Dictionary = {}
+	for candidate in upgrades.getRecords():
+		if(candidate["uniqueID"] == uniqueID):
+			record = candidate
+	if(record.empty()):
+		return "It is not in there."
+	var rebuilt = GlobalRegistry.createItem(record["id"], false)
+	if(rebuilt == null):
+		return "That item no longer exists."
+	rebuilt.uniqueID = record["uniqueID"]
+	rebuilt.loadData(record["data"])
+	var _taken2:Dictionary = upgrades.take(uniqueID)
+	GM.pc.getInventory().addItem(rebuilt)
+	return ""
+
+# Called by RestingInCellScene after a rest in the player's own cell: the better bedding gives extra stamina. Returns the bonus.
+func afterRestInOwnCell(seconds) -> int:
+	if(!isMainReady() || GM.pc.getLocation() != GM.pc.getCellLocation()):
+		return 0
+	var hours:float = floor(float(seconds) / 3600.0)
+	var multiplier:float = max(1.0 + GM.pc.getBuffsHolder().getCustom(BuffAttribute.RestEffectiveness), 0.1)
+	var bonus:int = getUpgrades().restBonus(hours * 10.0 * multiplier)
+	if(bonus > 0):
+		GM.pc.addStamina(bonus)
+		GM.main.addMessage("Your better bedding gives you " + str(bonus) + " extra stamina.")
+	return bonus

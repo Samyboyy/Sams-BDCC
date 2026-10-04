@@ -119,3 +119,20 @@ nodes, so the map scene is not edited. Base-game edits, all no-ops without `Sand
 - **`Game/InteractionSystem/Interactions/Talking.gd`:** a "Which cell?" action in `init_text` (player talking to an NPC, score 0 so NPCs never pick it), the `ask_cell` branch
   in `init_do` (stores the knowledge through the module, nothing else) and the `asked_cell` state.
 - **`Scenes/MeScene.gd`:** a "Cells" button in the main menu and a `cellsMenu` state that prints the module's text (your cell, cellmate, learned cells).
+
+### 8. Jobs, wages and cell upgrades (Milestone 5)
+
+Everything else is module-contained: the employment and upgrade services, the work clock (the existing `pcProcessTime` game-extender hook), three module scenes
+(job board, shift, cell upgrades), and the buttons, which a world edit (`WorldEdits/WorkWorldEdit.gd`) adds to the existing rooms (the canteen, the three workplaces and
+the player's cell) as `RoomAction` nodes, so no map scene is edited. Base-game edits, all no-ops without `SandboxOverhaulModule`:
+
+- **`Scenes/Mineshaft/WorkInMinesScene.gd`:** the vanilla 1 credit per "Work" click was unlimited wage farming (only stamina limited it). With the module, the credit is paid
+  once per day (`getInformalMiningPay()`); later sessions still mine, take the same stamina and time and still fire `Trigger.WorkingInMines`, they just pay nothing, and a message
+  says so. Without the module the credit is paid every time as before. `FirstTimeInMinesScene` (the story intro and its flag) is untouched. A module-only solution is not possible:
+  the credit is granted inside the scene.
+- **`Scenes/MeScene.gd`:** a "Work" button in the main menu and a `workMenu` state that prints the module's job status text (the same place as the "Cells" button).
+- **`Scenes/RestingInCellScene.gd`:** after `afterRestingInBed()` in the `restuntil` branch, `afterRestInOwnCell(timePassed)` adds the better-bedding stamina bonus. This scene is only
+  reachable from the player's own cell, and the module checks the location again.
+- **`Scenes/PlayerStashScene.gd`:** with the module the free pillow stash has a capacity (4 stacks, 12 with the personal locker). A small `getStashRefusal(item)` helper asks the module
+  and is checked before each of the three deposit paths (`stashx`, `hideallitems` and the inventory-screen click); the stash screen also prints the module's capacity line. It returns ""
+  without the module, so vanilla stays unlimited. A module-only solution is not possible: the scene moves items straight into the `playerstash` inventory. Withdrawals are never restricted.

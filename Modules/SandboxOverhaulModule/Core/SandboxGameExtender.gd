@@ -8,6 +8,8 @@ var state = StateScript.new()
 const ConversationScript = preload("res://Modules/SandboxOverhaulModule/Relationships/ConversationRelationships.gd")
 const CellsScript = preload("res://Modules/SandboxOverhaulModule/Cells/Cells.gd")
 const InjuriesScript = preload("res://Modules/SandboxOverhaulModule/Injuries/Injuries.gd")
+const EmploymentScript = preload("res://Modules/SandboxOverhaulModule/Work/Employment.gd")
+const UpgradesScript = preload("res://Modules/SandboxOverhaulModule/Cells/CellUpgrades.gd")
 const CombatScript = preload("res://Modules/SandboxOverhaulModule/Relationships/CombatConsequences.gd")
 const RelationshipsScript = preload("res://Modules/SandboxOverhaulModule/Relationships/DirectedRelationships.gd")
 
@@ -15,6 +17,8 @@ var relationships
 var combat
 var injuries
 var cells
+var employment
+var upgrades
 var scheduleBucket:int = -1 # last ten-minute bucket the nightly schedule ran in (not saved, so it runs again after a load)
 var ownerMainId: int = 0 # instance id of the MainScene the state belongs to (ids are never reused, pointers can be)
 
@@ -24,17 +28,20 @@ func _init():
 	combat = CombatScript.new(state, relationships)
 	injuries = InjuriesScript.new(state)
 	cells = CellsScript.new(state)
+	employment = EmploymentScript.new(state)
+	upgrades = UpgradesScript.new(state)
 
 func register(_GES: GameExtenderSystem):
 	_GES.register(self, ExtendGame.saveLoadData)
 	_GES.register(self, ExtendGame.pcHoursPassed)
 	_GES.register(self, ExtendGame.pcProcessTime)
 
-# Runs the nightly schedule at most once per ten in-game minutes (the module decides; this is only the trigger).
+# Runs the nightly schedule at most once per ten in-game minutes (the module decides; this is only the trigger), and the work clock.
 func pcProcessTime(_pc, _seconds):
 	var theModule = GlobalRegistry.getModule("SandboxOverhaulModule")
 	if(theModule != null):
 		theModule.onScheduleTick()
+		theModule.onWorkTick()
 
 # Injuries heal with the player's hour counter, which runs on every time skip, so every character's injuries are processed here
 # (the NPC hour hook only reaches characters that are currently being simulated).
@@ -71,6 +78,16 @@ func getInjuries():
 func getCells():
 	var _state = getState()
 	return cells
+
+# Employment service, same lifetime rules as getRelationships.
+func getEmployment():
+	var _state = getState()
+	return employment
+
+# Cell upgrade and storage service, same lifetime rules as getRelationships.
+func getUpgrades():
+	var _state = getState()
+	return upgrades
 
 # Drops characters that definitely no longer exist. Does nothing without a live MainScene.
 func pruneMissingCharacters():

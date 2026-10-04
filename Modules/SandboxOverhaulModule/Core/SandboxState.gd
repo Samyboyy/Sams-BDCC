@@ -5,9 +5,12 @@ const AxisScript = preload("res://Modules/SandboxOverhaulModule/Relationships/Fe
 
 # 1 -> 2: injuries were added (version-1 saves have none).
 # 2 -> 3: cell_assignments got its real structure and known_cells and cell_presence were added (older saves have none; cells are created on first use).
-const CURRENT_SCHEMA_VERSION = 3
+# 3 -> 4: work (jobs, shift and attendance), upgrades and hidden_storage were added (older saves are unemployed with no upgrades).
+const CURRENT_SCHEMA_VERSION = 4
 const InjuriesScript = preload("res://Modules/SandboxOverhaulModule/Injuries/Injuries.gd")
 const CellsScript = preload("res://Modules/SandboxOverhaulModule/Cells/Cells.gd")
+const EmploymentScript = preload("res://Modules/SandboxOverhaulModule/Work/Employment.gd")
+const UpgradesScript = preload("res://Modules/SandboxOverhaulModule/Cells/CellUpgrades.gd")
 
 var schema_version: int = CURRENT_SCHEMA_VERSION
 var npc_profiles: Dictionary = {}
@@ -27,6 +30,11 @@ var cooldowns: Dictionary = {}
 var reputation: Dictionary = {"combat": 0.0, "defiance": 0.0}
 # Lasting combat injuries: injuries[characterID][type] = {"severity": 1..3, "remainingHours": float}. See Injuries.
 var injuries: Dictionary = {}
+# The player's job, shift, warnings and work history. See Employment.
+var work: Dictionary = EmploymentScript.defaults()
+# Purchased cell upgrades and the hidden compartment's contents. See CellUpgrades. The ordinary storage is the vanilla pillow stash, which BDCC saves itself.
+var upgrades: Dictionary = UpgradesScript.defaults()
+var hidden_storage: Array = []
 
 const DICT_FIELDS = ["npc_profiles", "directed_relationships", "major_memories", "knowledge", "gang_state", "cooldowns"]
 
@@ -40,6 +48,9 @@ func clear():
 	cell_assignments = {}
 	known_cells = {}
 	cell_presence = {}
+	work = EmploymentScript.defaults()
+	upgrades = UpgradesScript.defaults()
+	hidden_storage = []
 
 # Safe getters: missing entries return defaults, never null.
 func getNpcProfile(charID: String) -> Dictionary:
@@ -64,7 +75,8 @@ func getCooldown(key: String, default = 0):
 	return cooldowns.get(key, default)
 
 func saveData() -> Dictionary:
-	var data = {"schema_version": schema_version, "obligations": obligations.duplicate(true), "reputation": reputation.duplicate(true), "injuries": injuries.duplicate(true), "cell_assignments": cell_assignments.duplicate(true), "known_cells": known_cells.duplicate(true), "cell_presence": cell_presence.duplicate(true)}
+	var data = {"schema_version": schema_version, "obligations": obligations.duplicate(true), "reputation": reputation.duplicate(true), "injuries": injuries.duplicate(true), "cell_assignments": cell_assignments.duplicate(true), "known_cells": known_cells.duplicate(true), "cell_presence": cell_presence.duplicate(true),
+		"work": work.duplicate(true), "upgrades": upgrades.duplicate(true), "hidden_storage": hidden_storage.duplicate(true)}
 	for field in DICT_FIELDS:
 		data[field] = get(field).duplicate(true)
 	return data
@@ -90,6 +102,10 @@ func loadData(data) -> void:
 		cell_assignments = sanitizeCellAssignments(data.get("cell_assignments"))
 		known_cells = sanitizeKnownCells(data.get("known_cells"))
 		cell_presence = sanitizeCellPresence(data.get("cell_presence"))
+	if(schema_version >= 4):
+		work = EmploymentScript.sanitize(data.get("work"))
+		upgrades = UpgradesScript.sanitizeUpgrades(data.get("upgrades"))
+		hidden_storage = UpgradesScript.sanitizeRecords(data.get("hidden_storage"), UpgradesScript.HIDDEN_SLOTS)
 	var loadedObligations = data.get("obligations")
 	if(loadedObligations is Array):
 		obligations = loadedObligations.duplicate(true)
@@ -239,3 +255,9 @@ func migrate() -> void:
 		known_cells = {}
 		cell_presence = {}
 		schema_version = 3
+	if(schema_version == 3):
+		# 3 -> 4: a version-3 save has no job, upgrades or storage: unemployed, nothing bought.
+		work = EmploymentScript.defaults()
+		upgrades = UpgradesScript.defaults()
+		hidden_storage = []
+		schema_version = 4

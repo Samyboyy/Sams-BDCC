@@ -19,7 +19,11 @@ func _run():
 func _react(_action: String, _args):
 	if(_action == "work"):
 		
-		GM.pc.addCredits(1)
+		var pay = 1
+		var sandbox = GlobalRegistry.getModule("SandboxOverhaulModule")
+		if(sandbox != null):
+			pay = sandbox.getInformalMiningPay()
+		GM.pc.addCredits(pay)
 		GM.pc.addStamina(-40)
 		
 		processTime(2*60*60)
@@ -28,7 +32,10 @@ func _react(_action: String, _args):
 			endScene()
 			return
 		
-		addMessage("You earned 1 work credit")
+		if(pay > 0):
+			addMessage("You earned 1 work credit")
+		else:
+			addMessage("The foreman already paid you for your ore today, so this earned nothing. A job from the canteen job board pays a proper wage.")
 
 	if(_action == "endthescene"):
 		endScene()

@@ -72,3 +72,29 @@ Eligible inmates (the player and the dynamic inmates, including inmates who are 
 Assignments never reshuffle; removed characters free their place. Inmates settle in around 21:00 and leave around 07:00 with a fixed per-inmate offset of up to 30 minutes.
 Tonight's attendance is recorded as `home` or `away` per inmate (`cell_presence`, valid only for that night): an inmate who settles, or who simply is not spawned, is home; one who is busy, still walking, or kept elsewhere (slavery, SoftSlavery, an enslave quest) is away. An away inmate is tried again every ten minutes; the system only knows home versus away, never where they are. Enslaving or freeing someone never changes their cell. The directory is the "Cell directory" button in each block's hall;
 "Cell info" in the player's cell, and "Cells" in the Me screen, show the player's cell, cellmate and the cells they have learned by asking.
+
+## Jobs, money and cell upgrades (Milestone 5)
+
+See `Work/Employment.gd` and `Cells/CellUpgrades.gd`. The loop is: take a job at the canteen job board, go to the workplace during the arrival window, choose "Start shift",
+get paid, then spend the credits on treatment (2 / 3 / 6), the cryopod or healing gel, or the cell upgrades. There is one currency (the existing work credits) and one inventory.
+
+- **Jobs:** Mine worker (mining shafts, 08:00-10:00, 3 credits), Workshop hand (workshop, 10:00-12:00, 4) and Laundry hand (laundry, 12:00-14:00, 2). Each shift takes about two hours and
+  costs stamina (the existing 40 for mining, 40 and 30 for the others). There is no mail room in BDCC, so there is no mail job. One job at a time, one paid shift per day across all of them
+  (a job change keeps the day's result), no stat growth. Nothing is forced: no teleport, no auto-start.
+- **Attendance:** a shift is "not started", "completed", "missed" or "excused". A completed shift clears one warning, an unexcused miss adds one and three in a row dismiss the player,
+  who can apply again after three days. Leaving a job and being dismissed keep the history. A reminder appears when the window opens; the status is in the Me screen under "Work".
+- **Excused absences:** when the window has closed without a shift, the module asks BDCC what keeps the player away *at that moment*: player slavery, owned by an NPC (soft slavery), an
+  owner event scene, or the player's own interaction being stocks, slutwall, unconscious, nurse rescue, caught off-limits, recovering from a lost fight, being punished or an ambush.
+  Another module can excuse today's shift with `recordExcusedAbsence(reason)`. *Limitation:* BDCC keeps no history of where the player was, so the check is made when the shift is found
+  overdue (the next time any time passes after the window closes), not at the exact deadline: a player who is released from the stocks before time next passes is counted as missed.
+  Medical confinement and location control by restraints do not exist as detectable states in BDCC, so they are not checked.
+- **Mining:** the story intro still pays once and sets its flag. Ordinary "Work" in the mines (no job needed) still works but pays its 1 credit once per day. The mining job is a separate,
+  better-paid shift with the same stamina cost, and it still fires `Trigger.WorkingInMines` so story modules see it.
+- **Cell stash and upgrades** (player's own cell, "Cell upgrades"): the ordinary cell storage is BDCC's own pillow stash (the `playerstash` inventory, which BDCC already saves);
+  the cell screen and `PlayerStashScene` show the same items. With the module it holds 4 stacks for free (a stack that merges into one already there needs no room); the Personal
+  locker (9 credits) raises the same stash to 12. Nothing is ever removed: a stash that already holds more than it fits (an old save) keeps everything, allows withdrawals and refuses
+  new stacks until it is back under the limit. Without the module the stash is unlimited vanilla. It is ordinary, unsecured storage. The Hidden compartment (12 credits, 3 stacks) is a
+  separate module-owned container (`hidden_storage` in the save) meant to be skipped by future guard searches; nothing searches cells yet. Better bedding (12 credits) adds half again as much
+  stamina when resting in the player's own cell (the "Rest" option; sleeping already restores everything). Deposits take any item carried loose in the inventory, including loose restraints (useful for contraband in the hidden compartment); they refuse worn or attached items (BDCC keeps worn items in the equipped slots), important items and persistent items, with a reason.
+- **Save data:** `SandboxState` schema 4 adds `work`, `upgrades` and `hidden_storage` (no copy of the stash). Older saves are unemployed with nothing bought; a new game resets everything.
+- **API on the module:** `getEmploymentState()`, `recordExcusedAbsence(reason)`, `isShiftCompleteToday()`, `getPurchasedUpgrades()`, `getStoredRecords(hidden)` (false: the real stash, true: the hidden compartment), `depositItem(item, hidden)`, `withdrawItem(uniqueID, hidden)`.

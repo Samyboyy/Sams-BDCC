@@ -52,6 +52,9 @@ func _react(_action: String, _args):
 		
 		var timePassed = GM.main.processTimeUntil(newt * 60 * 60)
 		GM.pc.afterRestingInBed(timePassed)
+		var sandbox = GlobalRegistry.getModule("SandboxOverhaulModule")
+		if(sandbox != null):
+			sandbox.afterRestInOwnCell(timePassed)
 		
 		if(GM.ES.triggerReact(Trigger.Waiting, [timePassed])):
 			endScene()

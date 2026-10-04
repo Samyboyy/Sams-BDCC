@@ -5,6 +5,13 @@ var inventoryScreenScene = preload("res://UI/Inventory/InventoryScreen.tscn")
 func _init():
 	sceneID = "PlayerStashScene"
 
+# With SandboxOverhaulModule the stash has a capacity (see CORE_PATCHES.md); returns why the item cannot go in, "" when it can. Always "" without it.
+func getStashRefusal(item) -> String:
+	var sandbox = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandbox == null):
+		return ""
+	return sandbox.getStashDepositRefusal(item)
+
 func _run():
 	if(state == ""):
 		if(GM.pc.getLocation() != GM.pc.getCellLocation()):
@@ -19,6 +26,8 @@ func _run():
 		say("Items in the stash:\n")
 		say(Util.join(itemNames, ", "))
 		say("\n\n")
+		if(GlobalRegistry.getModule("SandboxOverhaulModule") != null):
+			say(GlobalRegistry.getModule("SandboxOverhaulModule").getStashStatusText() + "\n\n")
 		
 		items = GM.pc.getInventory().getAllItems()
 		itemNames = []
@@ -31,6 +40,8 @@ func _run():
 		addButton("Take item", "Take an item", "takeitemmenu")
 		addButton("Step away", "You're done", "endthescene")
 	if(state == "hideitemmenu"):
+		if(GlobalRegistry.getModule("SandboxOverhaulModule") != null):
+			saynn(GlobalRegistry.getModule("SandboxOverhaulModule").getStashStatusText())
 		var theItems = []
 		theItems.append_array(GM.pc.getInventory().getItems())
 		if(GM.pc.getCredits() > 0):
@@ -73,6 +84,11 @@ func _react(_action: String, _args):
 	if(_action == "stashx"):
 		var item: ItemBase = _args[0]
 		
+		var refusal = getStashRefusal(item)
+		if(refusal != ""):
+			addMessage(refusal)
+			return
+
 		var newItem = item.splitAmount(_args[1])
 		
 		if(newItem != null):
@@ -99,6 +115,10 @@ func _react(_action: String, _args):
 		var itemsToCheck = GM.pc.getInventory().getItems().duplicate()
 		for item in itemsToCheck:
 			if(item.id == _args[0]):
+				var refusal = getStashRefusal(item)
+				if(refusal != ""):
+					addMessage(refusal)
+					break
 				GM.pc.getInventory().removeItem(item)
 				GlobalRegistry.getCharacter("playerstash").getInventory().addItem(item)
 		return
@@ -160,6 +180,10 @@ func onInventoryItemGroupInteracted(item: ItemBase):
 func onInventoryItemInteracted(item: ItemBase):
 	if(state == "hideitemmenu"):
 		#GM.main.pickOption("hideitem", [item.getUniqueID()])
+		var refusal = getStashRefusal(item)
+		if(refusal != ""):
+			addMessage(refusal)
+			return
 		if(item.id == "WorkCredit"):
 			GM.pc.addCredits(-GM.pc.getCredits())
 		GM.pc.getInventory().removeItem(item)
