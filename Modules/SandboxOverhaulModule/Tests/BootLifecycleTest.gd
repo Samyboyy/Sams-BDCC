@@ -66,6 +66,33 @@ func _ready():
 	check(!ext.getState().cooldowns.has("once") && ext.ownerMainId == 0, "freed main resolves to id 0 and resets")
 	GM.main = null
 	mainC.free()
+	# Relationships through the real extender / GameExtenderSystem.
+	GM.main = mainA
+	var rel = SandboxOverhaulModule.getRelationships()
+	check(rel == ext.getRelationships() && rel == SandboxOverhaulModule.getRelationships(), "same service instance")
+	var _f = rel.setFeeling("pc", "dynamicnpc1", "affection", -60)
+	_f = rel.setFeeling("dynamicnpc1", "pc", "fear", 40)
+	_f = rel.setFeeling("pc", "bob", "trust", 20)
+	_f = rel.setFeeling("bob", "ghost", "respect", 10)
+	mainA.dynamicCharacters["bob"] = Reference.new() # resolvable by getCharacter
+	mainA.dynamicCharacters["dynamicnpc1"] = Reference.new()
+	var savedRel = JSON.parse(JSON.print(GM.GES.saveData())).result
+	check(rel.hasRelationship("pc", "bob") && rel.hasRelationship("pc", "dynamicnpc1"), "known characters and pc kept by pruning")
+	check(!rel.hasRelationship("bob", "ghost") && !rel.getCharacterIDs().has("ghost"), "unknown character pruned before save")
+	var savedState = savedRel["extendersData"]["SandboxGameExtender"]["directed_relationships"]
+	check(savedState.has("pc") && savedState.has("dynamicnpc1") && savedState["pc"].has("bob") && !savedState.has("bob") && !savedState.has("ghost"), "saved copy has pruned data: " + str(savedState.keys()))
+	GM.GES.loadData(JSON.parse(JSON.print(savedRel)).result)
+	check(rel.getFeeling("pc", "dynamicnpc1", "affection") == -60.0 && rel.getFeeling("dynamicnpc1", "pc", "fear") == 40.0 and rel.getFeeling("dynamicnpc1", "pc", "affection") == 0.0, "relationships round trip through GES, same service")
+	GM.main = mainB
+	check(!SandboxOverhaulModule.getRelationships().hasRelationship("pc", "dynamicnpc1") && SandboxOverhaulModule.getRelationships() == rel, "reset between mains, same service")
+	var _g = rel.setFeeling("pc", "zed", "trust", 5)
+	GM.main = null
+	check(SandboxOverhaulModule.getRelationships().getCharacterIDs().size() == 0, "null main resets relationships")
+	_g = SandboxOverhaulModule.getRelationships().setFeeling("pc", "zed", "trust", 5)
+	var _saved = ext.saveData()
+	check(rel.hasRelationship("pc", "zed"), "no pruning without a live main")
+	mainA.dynamicCharacters.clear()
+
 	check(SandboxOverhaulModule.getState() != null, "Module.getState works")
 	
 	GM.main = null

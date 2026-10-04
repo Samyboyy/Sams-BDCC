@@ -539,6 +539,11 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://Game/ModularDialogue/Parser/DialogueParser.gd"
 }, {
+"base": "Reference",
+"class": "DirectedRelationships",
+"language": "GDScript",
+"path": "res://Modules/SandboxOverhaulModule/Relationships/DirectedRelationships.gd"
+}, {
 "base": "Object",
 "class": "Direction",
 "language": "GDScript",
@@ -658,6 +663,11 @@ _global_script_classes=[ {
 "class": "ExtendGame",
 "language": "GDScript",
 "path": "res://Game/GameExtenders/ExtendGame.gd"
+}, {
+"base": "Object",
+"class": "FeelingAxis",
+"language": "GDScript",
+"path": "res://Modules/SandboxOverhaulModule/Relationships/FeelingAxis.gd"
 }, {
 "base": "Object",
 "class": "Fetish",
@@ -2161,6 +2171,7 @@ _global_script_class_icons={
 "DialogueForm": "",
 "DialogueFormBank": "",
 "DialogueParser": "",
+"DirectedRelationships": "",
 "Direction": "",
 "Doll3D": "",
 "DollAttachmentZone": "",
@@ -2185,6 +2196,7 @@ _global_script_class_icons={
 "EventTriggerSceneHook": "",
 "EventTriggerWeighted": "",
 "ExtendGame": "",
+"FeelingAxis": "",
 "Fetish": "",
 "FetishBase": "",
 "FetishHolder": "",

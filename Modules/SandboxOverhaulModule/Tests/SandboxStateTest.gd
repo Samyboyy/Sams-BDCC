@@ -48,5 +48,12 @@ func _init():
 	snap["cooldowns"]["mut"] = 1
 	check(!t.cooldowns.has("mut"), "saveData returns a copy")
 	
+	t.loadData({"directed_relationships": {"a": {"b": {"a": 5, "t": 999}}, "c": 1}})
+	check(t.directed_relationships.has("a") && t.directed_relationships["a"]["b"]["t"] == 100.0 && !t.directed_relationships.has("c"), "state load sanitises directed_relationships")
+	t.clear()
+	check(t.directed_relationships.empty(), "clear empties directed_relationships")
+	t.loadData({"cooldowns": {"k": 1}})
+	check(t.directed_relationships.empty() && t.schema_version == 1, "missing directed_relationships defaults, schema stays 1")
+
 	print("SandboxStateTest: " + ("PASS" if failures == 0 else str(failures) + " failure(s)"))
 	quit(1 if failures > 0 else 0)
