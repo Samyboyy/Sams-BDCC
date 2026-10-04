@@ -9,6 +9,7 @@ class_name CombatConsequences
 # Both are -100..100 and start at 0. This is a lightweight rumour abstraction: no witnesses or propagation.
 
 const AxisScript = preload("res://Modules/SandboxOverhaulModule/Relationships/FeelingAxis.gd")
+const InjuriesScript = preload("res://Modules/SandboxOverhaulModule/Injuries/Injuries.gd")
 
 const REP_MIN = -100.0
 const REP_MAX = 100.0
@@ -50,6 +51,7 @@ const ATTACK_COMBAT_MULT_AT_MIN = 1.5 # Combat Reputation -100
 const ATTACK_COMBAT_MULT_AT_MAX = 0.5 # Combat Reputation +100
 const ATTACK_FEAR_MULT_AT_MAX = 0.1 # personal Fear 100 (linear from 1.0 at Fear 0)
 const ATTACK_MULT_FLOOR = 0.05 # nobody is ever fully immune
+const ATTACK_MULT_CAP = 1.75 # injuries and a weak reputation together can raise interest only this far
 
 # Post-fight punishment scoring after the player lost.
 const DEFEAT_RESISTED = "resisted"
@@ -191,7 +193,9 @@ func attackMultiplier(npcID) -> float:
 	if(npcID is String && npcID != "" && npcID != "pc"):
 		fear = clamp(relationships.getFeeling(npcID, "pc", "fear"), 0.0, 100.0)
 	var fearMult:float = 1.0 - (1.0 - ATTACK_FEAR_MULT_AT_MAX) * (fear / 100.0)
-	return max(ATTACK_MULT_FLOOR, combatMult * fearMult)
+	# The player's highest active injury makes them look like a better target (see Injuries.ATTACK_INTEREST_MULT).
+	var injuryMult:float = InjuriesScript.attackInterestMultiplier(InjuriesScript.highestSeverityIn(state.injuries, "pc"))
+	return clamp(combatMult * fearMult * injuryMult, ATTACK_MULT_FLOOR, ATTACK_MULT_CAP)
 
 # Multiplier on harsher post-fight punishment scores after the player lost.
 static func defeatPunishMultiplier(kind) -> float:

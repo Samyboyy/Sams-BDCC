@@ -894,6 +894,8 @@ func sandboxFightEnded():
 	sandboxReported = true
 	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
 	if(sandboxModule != null):
+		# Lasting injuries come from how much pain each fighter ended with, before onFightEnd can change it.
+		sandboxModule.onFightInjuries(enemyID, float(enemyCharacter.getPain()) / max(1.0, float(enemyCharacter.painThreshold())), float(GM.pc.getPain()) / max(1.0, float(GM.pc.painThreshold())), battleName)
 		sandboxModule.onFightSceneEnded(enemyID, battleState, battleSubmitter, battleName)
 
 func onPCWin():

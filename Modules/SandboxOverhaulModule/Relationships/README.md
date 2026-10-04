@@ -42,3 +42,24 @@ ability) and Defiance (perceived willingness to resist). Individual NPCs keep th
 store. Outcomes and numbers are in the `RULES` table; the first outcome against an NPC each in-game day is full strength, later ones are
 25% personal change and 25% Defiance, with no more Combat Reputation. NPC attack interest is multiplied by the Combat Reputation and Fear multipliers (never below 0.05),
 and punishments after a lost fight are weighted 1.25x if the player resisted, 0.65x if they surrendered.
+
+## Injuries (Milestone 3)
+
+See `Injuries/Injuries.gd` (all tuning constants in one place). Three types and three severities (Minor 10%, Moderate 20%, Severe 30%; 24, 72 and 120 hours):
+
+| Type | Penalty |
+|---|---|
+| Arm Injury | physical damage dealt reduced by the percentage |
+| Leg Injury | maximum stamina and final dodge chance each multiplied by 0.9 / 0.8 / 0.7 |
+| Body Trauma | physical damage received increased by the percentage |
+
+**Only Body Trauma currently arises from ordinary fights.** A fighter ending a fight with 35% / 60% / 85% of their pain threshold gets a Minor / Moderate / Severe
+injury (one level less in the Fight Club arena), but BDCC records no per-body-region damage, so the type is always Body Trauma and nothing is chosen at random.
+Arm and Leg injuries are fully implemented and tested; they are for future targeted attacks, scripted events and debugging (`Injuries.applyInjury`, or
+`evaluateFight` with a region-damage dictionary). Do not describe them to players as something fights naturally cause.
+
+The Arm and Body Trauma penalties are applied by status effects through BDCC's buff calculations. The Leg Injury is applied by two multipliers in
+`BaseCharacter.getMaxStamina` and `getDodgeChance` (see `CORE_PATCHES.md`). All of them read `SandboxState.injuries`, so each is applied exactly once.
+
+No fight is excluded from injuries: the only fights that could be called tutorials (the intake fight against `rishaIntro`) or sparring (Rush's boxing) do not
+restore their participants afterwards, and there is no battle name or flag that marks a restorative fight.

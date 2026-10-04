@@ -77,7 +77,7 @@ All hooks call `GlobalRegistry.getModule("SandboxOverhaulModule")` and do nothin
 
 - **`Scenes/FightScene.gd`**
   - `submit` action: sets `battleEndedHow = "submit"` (it used to stay empty and became `"pain"` at the end) and the new `battleSubmitter = "pc"`. When the enemy surrenders, `checkEnd` sets `battleSubmitter = "enemy"`. Existing readers only compare `"lust"` on a win.
-  - `endbattle` action calls the new `sandboxFightEnded()`: it measures how hurt the winner is into `battleMargin` (larger of pain and lust as a fraction of the threshold) and, once per scene (`sandboxReported`), calls `onFightSceneEnded`, which acts only on Fight Club `"arenafight"` fights. This is the real Fight Club hook: every arena scene (`AvyTalkScene`, `AvyFirstArenaBattleScene`, `AvyFinalArenaBattleScene`) runs `FightScene` with the battle name `"arenafight"` and ends through `endbattle`.
+  - `endbattle` action calls the new `sandboxFightEnded()`: it measures how hurt the winner is into `battleMargin` (larger of pain and lust as a fraction of the threshold) and, once per scene (`sandboxReported`), first calls `onFightInjuries` (Milestone 3: both fighters' pain as a fraction of their threshold, before `onFightEnd`) and then calls `onFightSceneEnded`, which acts only on Fight Club `"arenafight"` fights. This is the real Fight Club hook: every arena scene (`AvyTalkScene`, `AvyFirstArenaBattleScene`, `AvyFinalArenaBattleScene`) runs `FightScene` with the battle name `"arenafight"` and ends through `endbattle`.
   - The three `endScene([battleState, battleEndedHow])` calls now also pass `battleMargin` and `battleSubmitter`.
 - **`Scenes/WorldScene.gd` `_react_scene_end`:** the fight results sent to the interaction also carry `how`, `margin` and `submitter`.
 - **`Game/InteractionSystem/PawnInteractionBase.gd`**
@@ -89,3 +89,19 @@ All hooks call `GlobalRegistry.getModule("SandboxOverhaulModule")` and do nothin
 - **`Game/InteractionSystem/Interactions/Talking.gd` `init_do`:** the player starting an attack calls `onUnprovokedAttack`.
 - **`Scenes/MeScene.gd` reputation menu:** shows the Combat Reputation and Defiance values, their bands and a one-line definition each.
 - **Not changed:** BDCC inmate reputation, Fight Club's own systems, `LostFight` social events, Nemesis, scripted and quest fights.
+
+### 6. Lasting combat injuries and medbay treatment (Milestone 3)
+
+Almost everything is module-contained: the injury status effects (`StatusEffects/`), the hourly healing (the existing `pcHoursPassed` game-extender hook,
+registered by `SandboxGameExtender`) and the penalties (BDCC's own buff and damage-modifier calculations). Base-game edits:
+
+- **`Scenes/FightScene.gd` `sandboxFightEnded()`:** calls `onFightInjuries(enemyID, enemyPainFraction, playerPainFraction, battleName)` once per scene,
+  before `onFightEnd` can change pain. If `SandboxOverhaulModule` is absent nothing happens.
+- **`Modules/MedicalModule/ElizaTalkScene.gd`:** a "Treat injuries" button in the main menu (only when the module exists), the `injuryMenu`, `injuryConfirm` and
+  `injuryResult` states, and the `injuryAsk` and `injuryPay` actions in `_react`, with two scene variables (`sandboxInjuryPick`, `sandboxInjuryResult`).
+  The existing "I'm hurt" cryopod and healing-gel options are untouched. Without the module the button does not appear.
+- **`Game/BaseCharacter.gd` `getMaxStamina()` and `getDodgeChance()`:** the Leg Injury is a percentage, which BDCC's flat-point stamina buff and additive dodge
+  modifier cannot express, so each function multiplies its final result once by `getLegInjuryScale(getID())` (0.9, 0.8 or 0.7; 1.0 when healthy).
+  `getMaxStamina` scales the character's own injury-free maximum (base + skills + buffs); `getDodgeChance` scales the final positive chance (the
+  deliberate `isDodging()` result of 1 is untouched). The scale is read straight from the stored injury, so there is no recursion. Both checks are skipped
+  when `SandboxOverhaulModule` is absent or its extender is not yet registered.

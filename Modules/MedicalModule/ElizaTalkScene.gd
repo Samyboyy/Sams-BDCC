@@ -3,6 +3,9 @@ extends "res://Scenes/SceneBase.gd"
 func _init():
 	sceneID = "ElizaTalkScene"
 
+var sandboxInjuryPick:String = "" # injury type picked in the "Treat injuries" menu
+var sandboxInjuryResult:Dictionary = {}
+
 func _reactInit():
 	if(GM.ES.triggerReact(Trigger.TalkingToNPC, ["eliza"])):
 		endScene()
@@ -69,6 +72,8 @@ func _run():
 				addButtonWithChecks("I'm hurt", "Ask for medical help", "healmenu", [], [ButtonChecks.NotGagged])
 		else:
 			addDisabledButton("I'm hurt", "You're not hurt enough to ask for medical help")
+		if(GlobalRegistry.getModule("SandboxOverhaulModule") != null):
+			addButton("Treat injuries", "Ask about the lasting injuries you got in fights", "injuryMenu")
 			
 		if(getModule("ElizaModule").canSexEliza()):
 			addButton("Sex!", "Have some fun with Eliza", "start_sex_menu")
@@ -76,6 +81,37 @@ func _run():
 		addButton("Leave", "Do something else", "endthescene")
 		GM.ES.triggerRun(Trigger.TalkingToNPC, ["eliza"])
 		
+	if(state == "injuryMenu"):
+		var sandboxOptions:Array = GlobalRegistry.getModule("SandboxOverhaulModule").getTreatmentOptions()
+		if(sandboxOptions.empty()):
+			saynn("[say=eliza]You don't have any lasting injuries. No treatment needed, so there is nothing to pay.[/say]")
+		else:
+			saynn("[say=eliza]Let me see what I can do. Each treatment is paid separately. Pick one.[/say]")
+			saynn("You have "+str(GM.pc.getCredits())+" credits.")
+			for sandboxOption in sandboxOptions:
+				saynn(sandboxOption["text"])
+			for sandboxOption in sandboxOptions:
+				addButton(sandboxOption["name"], sandboxOption["text"], "injuryAsk", [sandboxOption["type"]])
+		addButton("Back", "Go back", "")
+
+	if(state == "injuryConfirm"):
+		var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+		var sandboxPicked:Array = []
+		for sandboxOption in sandboxModule.getTreatmentOptions():
+			if(sandboxOption["type"] == sandboxInjuryPick):
+				sandboxPicked = [sandboxOption]
+		if(sandboxPicked.empty()):
+			saynn("[say=eliza]That injury is already gone.[/say]")
+			addButton("Back", "Go back", "injuryMenu")
+		else:
+			saynn("[say=eliza]"+sandboxPicked[0]["name"]+". That will be "+str(sandboxPicked[0]["cost"])+" credits. You have "+str(GM.pc.getCredits())+". Shall I go ahead?[/say]")
+			addButton("Pay "+str(sandboxPicked[0]["cost"])+" credits", "Pay and treat this injury", "injuryPay", [sandboxInjuryPick])
+			addButton("Cancel", "Don't pay", "injuryMenu")
+
+	if(state == "injuryResult"):
+		saynn(GlobalRegistry.getModule("SandboxOverhaulModule").describeTreatmentResult(sandboxInjuryResult))
+		addButton("Continue", "Go back", "injuryMenu")
+
 	if(state == "healmenu"):
 		saynn("[say=pc]Uh.. doc. I don’t feel too good. Can you fix me again?[/say]")
 		
@@ -536,6 +572,16 @@ func sayTanksVolume():
 	sayn("")
 
 func _react(_action: String, _args):
+	if(_action == "injuryAsk"):
+		sandboxInjuryPick = _args[0]
+		setState("injuryConfirm")
+		return
+
+	if(_action == "injuryPay"):
+		sandboxInjuryResult = GlobalRegistry.getModule("SandboxOverhaulModule").treatInjury(_args[0])
+		setState("injuryResult")
+		return
+
 	if(_action == "induce_lactation"):
 		runScene("ElizaInducingLactation")
 		endScene()

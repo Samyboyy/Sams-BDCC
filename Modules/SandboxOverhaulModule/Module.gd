@@ -4,6 +4,7 @@ class_name SandboxOverhaulModule
 const ExtenderScript = preload("res://Modules/SandboxOverhaulModule/Core/SandboxGameExtender.gd")
 const ConsentScript = preload("res://Modules/SandboxOverhaulModule/Relationships/SexConsent.gd")
 const AftermathScript = preload("res://Modules/SandboxOverhaulModule/Relationships/SexAftermath.gd")
+const InjuriesScript = preload("res://Modules/SandboxOverhaulModule/Injuries/Injuries.gd")
 const CombatScript = preload("res://Modules/SandboxOverhaulModule/Relationships/CombatConsequences.gd")
 const ConversationScript = preload("res://Modules/SandboxOverhaulModule/Relationships/ConversationRelationships.gd")
 
@@ -15,6 +16,12 @@ func _init():
 		"res://Modules/SandboxOverhaulModule/Core/SandboxGameExtender.gd",
 	]
 
+	statusEffects = [
+		"res://Modules/SandboxOverhaulModule/StatusEffects/SandboxArmInjury.gd",
+		"res://Modules/SandboxOverhaulModule/StatusEffects/SandboxLegInjury.gd",
+		"res://Modules/SandboxOverhaulModule/StatusEffects/SandboxBodyTrauma.gd",
+	]
+
 # Directed relationship service. Do not cache it across games; call this each time.
 static func getRelationships():
 	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
@@ -24,6 +31,11 @@ static func getRelationships():
 static func getCombat():
 	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
 	return extender.getCombat()
+
+# Injury service. Do not cache it across games; call this each time.
+static func getInjuries():
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	return extender.getInjuries()
 
 # Active state. Resets itself when a different game (MainScene) is running.
 static func getState():
@@ -158,3 +170,92 @@ func getDefeatPunishMultiplier(kind) -> float:
 # Text for the reputation screen.
 func getReputationText() -> String:
 	return getCombat().describeReputation()
+
+# ---- Injuries (see CORE_PATCHES.md) ----
+
+# Makes the character's injury status effects match the stored injuries and keeps current stamina within the new maximum.
+func refreshInjuryEffects(characterID) -> void:
+	if(GM.main == null || !is_instance_valid(GM.main)):
+		return
+	var theChar = GM.main.getCharacter(characterID)
+	if(theChar == null):
+		return
+	theChar.updateNonBattleEffects()
+	theChar.addStamina(0)
+
+func reportInjury(characterID, result:Dictionary) -> void:
+	if(characterID != "pc" || GM.main == null || !is_instance_valid(GM.main)):
+		return
+	var type = result["type"]
+	if(result["result"] == "new"):
+		GM.main.addMessage("[color=orange]You were injured: " + InjuriesScript.fullName(type, result["to"]) + ". " + InjuriesScript.penaltyText(type, result["to"]) + ".[/color]")
+	elif(result["result"] == "worsened"):
+		GM.main.addMessage("[color=red]Your " + InjuriesScript.typeName(type) + " worsened from " + InjuriesScript.severityName(result["from"]) + " to " + InjuriesScript.severityName(result["to"]) + ".[/color]")
+	elif(result["result"] == "refreshed"):
+		GM.main.addMessage("[color=red]Your " + InjuriesScript.typeName(type) + " was aggravated. It stays Severe.[/color]")
+
+# Called by FightScene.sandboxFightEnded with each fighter's pain as a fraction of their threshold. Both are judged on their own.
+func onFightInjuries(enemyID, enemyFraction, playerFraction, battleName) -> void:
+	var arena:bool = (battleName == "arenafight")
+	var theInjuries = getInjuries()
+	var ids:Array = ["pc"]
+	var fractions:Array = [playerFraction]
+	if(enemyID is String && enemyID != "" && enemyID != "pc"):
+		ids.append(enemyID)
+		fractions.append(enemyFraction)
+	for i in range(ids.size()):
+		var result:Dictionary = theInjuries.evaluateFight(ids[i], fractions[i], arena)
+		if(result["result"] != "none"):
+			refreshInjuryEffects(ids[i])
+			reportInjury(ids[i], result)
+
+# Called by the extender's pcHoursPassed hook with the number of in-game hours that passed.
+func processInjuryHours(hours) -> void:
+	for entry in getInjuries().processHours(hours):
+		refreshInjuryEffects(entry["characterID"])
+		if(entry["characterID"] == "pc" && GM.main != null && is_instance_valid(GM.main)):
+			GM.main.addMessage("[color=green]Your " + InjuriesScript.typeName(entry["type"]) + " has healed.[/color]")
+
+# The player's active injuries with their treatment prices, for the medbay.
+func getTreatmentOptions() -> Array:
+	var theInjuries = getInjuries()
+	var options:Array = []
+	for type in InjuriesScript.TYPES:
+		if(!theInjuries.has("pc", type)):
+			continue
+		var severity:int = theInjuries.getSeverity("pc", type)
+		var cost:int = InjuriesScript.TREATMENT_COST[severity]
+		options.append({"type": type, "severity": severity, "cost": cost, "name": InjuriesScript.fullName(type, severity), "text": InjuriesScript.fullName(type, severity) + " - " + InjuriesScript.penaltyText(type, severity) + " - about " + InjuriesScript.remainingText(theInjuries.getRemainingHours("pc", type)) + " remaining. Treatment: " + str(cost) + " credits."})
+	return options
+
+# Pays and removes one injury. Nothing is charged if the injury is gone or the player cannot afford it.
+func treatInjury(type) -> Dictionary:
+	var theInjuries = getInjuries()
+	if(!InjuriesScript.isValidType(type) || !theInjuries.has("pc", type)):
+		return {"success": false, "reason": "none", "type": type}
+	var severity:int = theInjuries.getSeverity("pc", type)
+	var cost:int = InjuriesScript.TREATMENT_COST[severity]
+	var credits:int = GM.pc.getCredits()
+	if(credits < cost):
+		return {"success": false, "reason": "credits", "type": type, "cost": cost, "missing": cost - credits}
+	GM.pc.addCredits(-cost)
+	theInjuries.remove("pc", type)
+	refreshInjuryEffects("pc")
+	return {"success": true, "type": type, "severity": severity, "cost": cost}
+
+func describeTreatmentResult(result:Dictionary) -> String:
+	if(result.get("success", false)):
+		return "[color=green]Your " + InjuriesScript.fullName(result["type"], result["severity"]) + " was treated for " + str(result["cost"]) + " credits.[/color]"
+	if(result.get("reason", "") == "credits"):
+		return "[color=red]You cannot afford that treatment. It costs " + str(result["cost"]) + " credits and you are " + str(result["missing"]) + " short. Nothing was charged; the injury will heal by itself in time.[/color]"
+	return "That injury is already gone. Nothing was charged."
+
+# Multiplier for the Leg Injury, used by BaseCharacter.getMaxStamina and getDodgeChance: 1.0 when healthy, 0.9 / 0.8 / 0.7 when injured.
+# Reads the stored injury directly (no character calculation), so it cannot recurse or apply twice.
+func getLegInjuryScale(characterID) -> float:
+	if(!GlobalRegistry.gameExtenders.has(ExtenderScript.EXTENDER_ID)):
+		return 1.0
+	var severity:int = getInjuries().getSeverity(characterID, InjuriesScript.LEG)
+	if(severity <= 0):
+		return 1.0
+	return 1.0 - InjuriesScript.PENALTY_PERCENT[severity] / 100.0

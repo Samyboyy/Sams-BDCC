@@ -869,6 +869,11 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://Images/ImagePacks/Images.gd"
 }, {
+"base": "Reference",
+"class": "Injuries",
+"language": "GDScript",
+"path": "res://Modules/SandboxOverhaulModule/Injuries/Injuries.gd"
+}, {
 "base": "CharacterGeneratorBase",
 "class": "InmateGenerator",
 "language": "GDScript",
@@ -1579,6 +1584,11 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://Modules/SandboxOverhaulModule/Core/SandboxGameExtender.gd"
 }, {
+"base": "StatusEffectBase",
+"class": "SandboxInjuryEffect",
+"language": "GDScript",
+"path": "res://Modules/SandboxOverhaulModule/StatusEffects/SandboxInjuryEffect.gd"
+}, {
 "base": "Module",
 "class": "SandboxOverhaulModule",
 "language": "GDScript",
@@ -2257,6 +2267,7 @@ _global_script_class_icons={
 "ImageConditions": "",
 "ImagePack": "",
 "Images": "",
+"Injuries": "",
 "InmateGenerator": "",
 "InmateLoot": "",
 "InmateType": "",
@@ -2399,6 +2410,7 @@ _global_script_class_icons={
 "RoomAction": "",
 "RoomStuff": "",
 "SandboxGameExtender": "",
+"SandboxInjuryEffect": "",
 "SandboxOverhaulModule": "",
 "SandboxState": "",
 "SaveConversion": "",

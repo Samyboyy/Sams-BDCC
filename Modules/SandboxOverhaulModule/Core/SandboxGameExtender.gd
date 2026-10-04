@@ -6,20 +6,31 @@ const StateScript = preload("res://Modules/SandboxOverhaulModule/Core/SandboxSta
 
 var state = StateScript.new()
 const ConversationScript = preload("res://Modules/SandboxOverhaulModule/Relationships/ConversationRelationships.gd")
+const InjuriesScript = preload("res://Modules/SandboxOverhaulModule/Injuries/Injuries.gd")
 const CombatScript = preload("res://Modules/SandboxOverhaulModule/Relationships/CombatConsequences.gd")
 const RelationshipsScript = preload("res://Modules/SandboxOverhaulModule/Relationships/DirectedRelationships.gd")
 
 var relationships
 var combat
+var injuries
 var ownerMainId: int = 0 # instance id of the MainScene the state belongs to (ids are never reused, pointers can be)
 
 func _init():
 	id = EXTENDER_ID
 	relationships = RelationshipsScript.new(state)
 	combat = CombatScript.new(state, relationships)
+	injuries = InjuriesScript.new(state)
 
 func register(_GES: GameExtenderSystem):
 	_GES.register(self, ExtendGame.saveLoadData)
+	_GES.register(self, ExtendGame.pcHoursPassed)
+
+# Injuries heal with the player's hour counter, which runs on every time skip, so every character's injuries are processed here
+# (the NPC hour hook only reaches characters that are currently being simulated).
+func pcHoursPassed(_pc, _hours):
+	var theModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(theModule != null):
+		theModule.processInjuryHours(_hours)
 
 # GameExtenderSystem.loadData skips extenders missing from the save, and this
 # object outlives MainScene, so reset whenever a different game is running.
@@ -40,6 +51,11 @@ func getCombat():
 	var _state = getState()
 	return combat
 
+# Injury service, same lifetime rules as getRelationships.
+func getInjuries():
+	var _state = getState()
+	return injuries
+
 # Drops characters that definitely no longer exist. Does nothing without a live MainScene.
 func pruneMissingCharacters():
 	if(GM.main == null || !is_instance_valid(GM.main)):
@@ -50,6 +66,9 @@ func pruneMissingCharacters():
 	for characterID in ConversationScript.getCooldownCharacterIDs(state.cooldowns):
 		if(characterID != "pc" && GM.main.getCharacter(characterID) == null):
 			ConversationScript.removeCooldownsOf(state.cooldowns, characterID)
+	for characterID in injuries.getCharacterIDs():
+		if(characterID != "pc" && GM.main.getCharacter(characterID) == null):
+			injuries.removeCharacter(characterID)
 	for characterID in CombatScript.getCooldownCharacterIDs(state.cooldowns):
 		if(characterID != "pc" && GM.main.getCharacter(characterID) == null):
 			CombatScript.removeCooldownsOf(state.cooldowns, characterID)

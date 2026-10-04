@@ -139,7 +139,11 @@ func getBaseMaxStamina() -> int:
 	return 100
 	
 func getMaxStamina() -> int:
-	return int(max(0, getBaseMaxStamina() + skillsHolder.getExtraStamina() + buffsHolder.getExtraStamina()))
+	var theMaxStamina:int = int(max(0, getBaseMaxStamina() + skillsHolder.getExtraStamina() + buffsHolder.getExtraStamina()))
+	if(GlobalRegistry.modules.has("SandboxOverhaulModule")):
+		# Leg Injury: a percentage of the character's injury-free maximum (see CORE_PATCHES.md)
+		theMaxStamina = int(round(theMaxStamina * GlobalRegistry.modules["SandboxOverhaulModule"].getLegInjuryScale(getID())))
+	return theMaxStamina
 	
 func getName() -> String:
 	return name
@@ -379,6 +383,10 @@ func getDodgeChance():
 
 	if(mult > 0.8):
 		mult = 0.8
+
+	if(mult > 0.0 && GlobalRegistry.modules.has("SandboxOverhaulModule")):
+		# Leg Injury: a percentage of the final dodge chance (see CORE_PATCHES.md)
+		mult *= GlobalRegistry.modules["SandboxOverhaulModule"].getLegInjuryScale(getID())
 
 	return mult
 	
