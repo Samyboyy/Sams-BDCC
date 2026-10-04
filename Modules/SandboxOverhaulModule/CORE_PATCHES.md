@@ -136,3 +136,23 @@ the player's cell) as `RoomAction` nodes, so no map scene is edited. Base-game e
 - **`Scenes/PlayerStashScene.gd`:** with the module the free pillow stash has a capacity (4 stacks, 12 with the personal locker). A small `getStashRefusal(item)` helper asks the module
   and is checked before each of the three deposit paths (`stashx`, `hideallitems` and the inventory-screen click); the stash screen also prints the module's capacity line. It returns ""
   without the module, so vanilla stays unlimited. A module-only solution is not possible: the scene moves items straight into the `playerstash` inventory. Withdrawals are never restricted.
+
+### 9. Guards, searches and enforcement (Milestone 6)
+
+Almost everything is module-contained, with no map or story-scene edits:
+
+- **The guard confrontation is a module interaction** (`Interactions/GuardEnforcement.gd`). Modules cannot list interactions, so `SandboxOverhaulModule.postInit()` registers it with the existing
+  `GlobalRegistry.registerInteraction`. BDCC's own `shouldRunOnMeet` is the "a guard and the player meet" hook; the module's ten-minute check (the existing `pcProcessTime` game-extender hook)
+  covers a guard standing next to a player who stays put.
+- **Witnessed violence** uses the existing Milestone 2 hook `onUnprovokedAttack` (the player starting a fight in `Talking`); **witnessed forced sex** uses the existing Milestone 1 hook
+  `applySexAftermathAndShouldRunVanilla`, only for the `FORCED` classification and only when the player is the one who forced it.
+- **Fights and punishment are not duplicated:** the confrontation starts the normal fight through `start_fight` (so `FightScene`, Milestone 2's `doFightAftermath` and Milestone 3's injuries run once,
+  exactly as in `CaughtOffLimits`) and hands over to the existing `PunishInteraction`.
+- **Contraband is BDCC's own** `ItemTag.Illegal` classification.
+
+One base-game edit, a no-op without `SandboxOverhaulModule`:
+
+- **`Scenes/MeScene.gd`:** a "Security" button in the main menu and a `securityMenu` state that prints the module's text (attention, label, recent search, active warning), next to the "Work" and
+  "Cells" buttons. A module-only solution is not possible: the Me screen has no extension point.
+
+Deliberately **not** changed: `CaughtOffLimits` (the off-limits frisk, 5-credit fine and removal of worn illegal items stays as it was), `MainCheckpointScene` (the elevator checkpoint frisk), and every story scene.

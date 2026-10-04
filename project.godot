@@ -839,6 +839,16 @@ _global_script_classes=[ {
 "language": "GDScript",
 "path": "res://Inventory/LootTable/GuardLoot.gd"
 }, {
+"base": "Reference",
+"class": "GuardSearches",
+"language": "GDScript",
+"path": "res://Modules/SandboxOverhaulModule/Security/Searches.gd"
+}, {
+"base": "Reference",
+"class": "GuardSecurity",
+"language": "GDScript",
+"path": "res://Modules/SandboxOverhaulModule/Security/Security.gd"
+}, {
 "base": "Module",
 "class": "GymModule",
 "language": "GDScript",
@@ -2276,6 +2286,8 @@ _global_script_class_icons={
 "GoogleTranslator": "",
 "GuardGenerator": "",
 "GuardLoot": "",
+"GuardSearches": "",
+"GuardSecurity": "",
 "GymModule": "",
 "HK_Glasses": "",
 "HK_HypnoRestraint": "",

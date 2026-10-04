@@ -341,7 +341,7 @@ func _ready():
 	var saved = JSON.parse(JSON.print(GM.GES.saveData())).result
 	var savedInjuries = saved["extendersData"]["SandboxGameExtender"]["injuries"]
 	check(savedInjuries.has("pc") and !savedInjuries.has("ghost") and savedInjuries.has("foe1"), "deleted characters are pruned before saving: " + str(savedInjuries.keys()))
-	check(saved["extendersData"]["SandboxGameExtender"]["schema_version"] == 4, "saved with schema 4")
+	check(saved["extendersData"]["SandboxGameExtender"]["schema_version"] == 5, "saved with schema 5")
 	injuries.remove("pc", "leg")
 	GM.GES.loadData(JSON.parse(JSON.print(saved)).result)
 	check(injuries.getSeverity("pc", "leg") == 3 and near(injuries.getRemainingHours("pc", "leg"), remaining), "load keeps the exact remaining hours: " + str(injuries.getRemainingHours("pc", "leg")))

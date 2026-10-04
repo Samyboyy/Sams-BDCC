@@ -10,6 +10,9 @@ const CombatScript = preload("res://Modules/SandboxOverhaulModule/Relationships/
 const ConversationScript = preload("res://Modules/SandboxOverhaulModule/Relationships/ConversationRelationships.gd")
 const EmploymentScript = preload("res://Modules/SandboxOverhaulModule/Work/Employment.gd")
 const UpgradesScript = preload("res://Modules/SandboxOverhaulModule/Cells/CellUpgrades.gd")
+const SecurityScript = preload("res://Modules/SandboxOverhaulModule/Security/Security.gd")
+const SearchesScript = preload("res://Modules/SandboxOverhaulModule/Security/Searches.gd")
+const ENFORCEMENT_INTERACTION = "res://Modules/SandboxOverhaulModule/Interactions/GuardEnforcement.gd"
 
 func _init():
 	id = "SandboxOverhaulModule"
@@ -36,6 +39,10 @@ func _init():
 		"res://Modules/SandboxOverhaulModule/StatusEffects/SandboxLegInjury.gd",
 		"res://Modules/SandboxOverhaulModule/StatusEffects/SandboxBodyTrauma.gd",
 	]
+
+# Interactions cannot be listed in a module, so the guard confrontation registers itself once everything else is registered.
+func postInit():
+	GlobalRegistry.registerInteraction(ENFORCEMENT_INTERACTION)
 
 # Directed relationship service. Do not cache it across games; call this each time.
 static func getRelationships():
@@ -67,6 +74,11 @@ static func getUpgrades():
 	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
 	return extender.getUpgrades()
 
+# Security service. Do not cache it across games; call this each time.
+static func getSecurity():
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	return extender.getSecurity()
+
 # Active state. Resets itself when a different game (MainScene) is running.
 static func getState():
 	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
@@ -86,6 +98,8 @@ func applySexAftermathAndShouldRunVanilla(interaction, sexData, sexResult) -> bo
 	var consent:int = ConsentScript.classify(interaction.id, interaction.getState())
 	if(consent == ConsentScript.UNKNOWN):
 		return false
+	if(consent == ConsentScript.FORCED && domID == "pc"):
+		recordWitnessedForcedSex(interaction)
 
 	var results:Array = AftermathScript.apply(getRelationships(), consent, domID, subID, sexResult.getAverageDomSatisfaction(), sexResult.getAverageSubSatisfaction())
 	for entry in results:
@@ -182,6 +196,7 @@ func onPlayerSurrender(interaction, npcID) -> void:
 # The player started an ordinary, unprovoked fight with this NPC.
 func onUnprovokedAttack(npcID) -> void:
 	var _u:Dictionary = runCombatOutcome(npcID, CombatScript.UNPROVOKED)
+	recordWitnessedViolence(npcID)
 
 # Called by FightScene.sandboxFightEnded when the player ends a fight. Only Fight Club arena fights are consensual; every other scene
 # fight is ignored here (interaction fights are handled by onFightAftermath, scripted fights are left alone). The enemy surrendering
@@ -794,3 +809,335 @@ func afterRestInOwnCell(seconds) -> int:
 		GM.pc.addStamina(bonus)
 		GM.main.addMessage("Your better bedding gives you " + str(bonus) + " extra stamina.")
 	return bonus
+
+# ---- Guards, searches and enforcement (see CORE_PATCHES.md and Security/) ----
+
+# The dice for every guard decision. Tests queue values here (each call takes the next one); in the game it is always a fresh random number.
+var queuedRolls:Array = []
+
+func nextRoll() -> float:
+	return float(queuedRolls.pop_front()) if !queuedRolls.empty() else randf()
+
+func isSecurityReady() -> bool:
+	return isMainReady() && GM.main.IS != null
+
+func getSecurityNow() -> int:
+	return SecurityScript.stamp(GM.main.getDays(), GM.main.getTime())
+
+func getSecurityScreenText() -> String:
+	if(!isMainReady()):
+		return ""
+	return getSecurity().getScreenText(getSecurityNow())
+
+func isGuardPawn(pawn) -> bool:
+	return pawn != null && !pawn.isDeleted && pawn.getChar() != null && pawn.isGuard()
+
+# A guard who sees the player is simply a guard pawn in the same room. BDCC has no line of sight, so same-room presence is the witness rule.
+# A guard who is in the middle of something else (sex, a fight, stocks...) is not a witness; the victim of an attack is, whatever they are doing.
+func getGuardWitnesses(locationID:String, excludeIDs:Array = [], includeBusyID:String = "") -> Array:
+	var result:Array = []
+	if(!isSecurityReady()):
+		return result
+	for pawn in GM.main.IS.getPawnsAt(locationID):
+		if(!isGuardPawn(pawn) || excludeIDs.has(pawn.charID)):
+			continue
+		var interaction = pawn.currentInteraction
+		if(interaction == null || interaction.id == "AloneInteraction" || pawn.charID == includeBusyID):
+			result.append(pawn)
+	return result
+
+# Guards who can act right now: witnesses who are not busy.
+func getFreeGuards(locationID:String) -> Array:
+	var result:Array = []
+	for pawn in getGuardWitnesses(locationID):
+		if(pawn.canBeInterrupted()):
+			result.append(pawn)
+	return result
+
+func getGuardAttitude(guardID:String) -> String:
+	var theChar = GM.main.getCharacter(guardID)
+	var mean = 0.0
+	if(theChar != null && theChar.getPersonality() != null):
+		mean = theChar.getPersonality().getStat(PersonalityStat.Mean)
+	return SecurityScript.attitudeFor(guardID, mean)
+
+# Staff Reputation level plus this guard's Trust and Respect towards the player, bounded to +-0.10.
+func getGuardLeniency(guardID:String) -> float:
+	var level = GM.pc.getReputation().getRepLevel(RepStat.Staff)
+	var relationships = getRelationships()
+	return SecurityScript.leniency(level, relationships.getFeeling(guardID, "pc", "trust"), relationships.getFeeling(guardID, "pc", "respect"))
+
+func getGuardFear(guardID:String) -> float:
+	return getRelationships().getFeeling(guardID, "pc", "fear")
+
+# Places where being undressed is expected: showers and bathrooms, the medical area, the player's own cell and solitary.
+static func isNudityExemptPlace(roomID, ownCellLocation) -> bool:
+	if(!(roomID is String) || roomID == ""):
+		return true
+	var lower:String = roomID.to_lower()
+	if(roomID == ownCellLocation || lower.find("shower") != -1 || lower.find("bathroom") != -1 || lower.find("medical") != -1 || lower.begins_with("med_") || lower.begins_with("medroom") || lower.find("solitary") != -1 || lower.find("playercell") != -1 || lower.begins_with("intro_")):
+		return true
+	return false
+
+# Meaningfully naked by BDCC's own standard (the same one its pawn reactions use): private parts that are not covered. Partial clothing is fine.
+func isPlayerExposed() -> bool:
+	return GM.pc.getExposedPrivates().size() > 0
+
+# Unable to dress: arms bound or hands blocked, or nothing loose to put on.
+func canPlayerDress() -> bool:
+	if(GM.pc.hasBlockedHands() || GM.pc.hasBoundArms()):
+		return false
+	for item in GM.pc.getInventory().getItems():
+		if([InventorySlot.Body, InventorySlot.UnderwearTop, InventorySlot.UnderwearBottom].has(item.getClothingSlotSafe())):
+			return true
+	return false
+
+# True when nothing stops a guard from stopping the player: no scene, interaction, slavery, restraint of location or dungeon in the way.
+func isSafeForEnforcement() -> bool:
+	if(!isSecurityReady() || GM.main.isInDungeon() || GM.main.PS != null || GM.main.IS.areInteractionsDisabled()):
+		return false
+	if(!GM.main.playerCanBeInterrupted() || !GM.main.canShowPawns() || getBlockedReason() != ""):
+		return false
+	var pcPawn = GM.main.IS.getPawn("pc")
+	return pcPawn != null && pcPawn.canBeInterrupted()
+
+# One guard and the player: the pair a meeting is about. Returns [guardPawn, playerPawn] or [].
+func pickGuardAndPlayer(pawn1, pawn2) -> Array:
+	if(pawn1 == null || pawn2 == null):
+		return []
+	if(pawn2.isPlayer() && isGuardPawn(pawn1)):
+		return [pawn1, pawn2]
+	if(pawn1.isPlayer() && isGuardPawn(pawn2)):
+		return [pawn2, pawn1]
+	return []
+
+# What this guard does about the player right now. Returns {} (nothing) or {"kind": "search" | "violent" | "severe" | "nudity_warn" | "nudity_escalate", "guard": ID}.
+func evaluateGuardEncounter(guardPawn, pcPawn) -> Dictionary:
+	if(!isSecurityReady() || !isGuardPawn(guardPawn) || pcPawn == null || !guardPawn.canBeInterrupted() || !isSafeForEnforcement()):
+		return {}
+	var locationID:String = guardPawn.getLocation()
+	if(pcPawn.getLocation() != locationID):
+		return {}
+	var guardID:String = guardPawn.charID
+	var security = getSecurity()
+	var now:int = getSecurityNow()
+	var backup:bool = false
+	for other in getFreeGuards(locationID):
+		if(other.charID != guardID):
+			backup = true
+	var ctx:Dictionary = {
+		"now": now, "day": GM.main.getDays(), "guard": guardID, "attitude": getGuardAttitude(guardID), "leniency": getGuardLeniency(guardID),
+		"fear": getGuardFear(guardID), "backup": backup, "exposed": isPlayerExposed(), "canDress": canPlayerDress(),
+		"exemptPlace": isNudityExemptPlace(locationID, GM.pc.getCellLocation()),
+	}
+	var decision:Dictionary = security.decide(ctx, [nextRoll(), nextRoll()])
+	match decision["action"]:
+		"confront":
+			return {"kind": decision["kind"], "guard": guardID}
+		"warn_nudity":
+			return {"kind": "nudity_warn", "guard": guardID}
+		"escalate_nudity":
+			return {"kind": "nudity_escalate", "guard": guardID}
+		"search":
+			return {"kind": "search", "guard": guardID}
+	return {}
+
+# Every ten in-game minutes: decay on a new day, drop a confrontation that no longer exists, the random cell search once a day, and guards in the player's room.
+func onSecurityTick() -> void:
+	if(!isSecurityReady() || GM.main.isInDungeon()):
+		return
+	var security = getSecurity()
+	var now:int = getSecurityNow()
+	var day:int = GM.main.getDays()
+	var _decay:float = security.advanceDay(day)
+	var exists:bool = false
+	for interaction in GM.main.IS.interactions:
+		if(interaction.id == "GuardEnforcement" && !interaction.wasDeleted):
+			exists = true
+	var _dropped:bool = security.dropStaleEnforcement(now, exists)
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	var bucket:int = day * 144 + int(GM.main.getTime() / 600)
+	if(extender.securityBucket == bucket):
+		return
+	extender.securityBucket = bucket
+	# The player covered up: the warning is done with
+	if(!security.getWarning(now).empty() && !isPlayerExposed()):
+		security.clearWarning()
+	runCellSearchIfDue(day, now)
+	var pcPawn = GM.main.IS.getPawn("pc")
+	if(pcPawn == null || security.isActive()):
+		return
+	for guardPawn in getFreeGuards(pcPawn.getLocation()):
+		var decision:Dictionary = evaluateGuardEncounter(guardPawn, pcPawn)
+		if(!decision.empty()):
+			GM.main.IS.startInteraction("GuardEnforcement", {"guard": decision["guard"], "inmate": "pc"}, {"kind": decision["kind"]})
+			return
+
+# ---- Witnessed offences ----
+
+# The player started a fight with this character. Only a guard who sees it (same room, not busy elsewhere) counts; nobody else, nothing happens.
+func recordWitnessedViolence(victimID) -> void:
+	if(!isSecurityReady() || !(victimID is String)):
+		return
+	var witnesses:Array = getGuardWitnesses(GM.pc.getLocation(), [], victimID)
+	if(witnesses.empty()):
+		return
+	var security = getSecurity()
+	var day:int = GM.main.getDays()
+	var victim = GM.main.getCharacter(victimID)
+	var victimIsGuard:bool = victim != null && victim.getCharacterType() == CharacterType.Guard
+	var level:String = "violent"
+	if(victimIsGuard && security.recordGuardAttack(day) >= 2):
+		level = "severe"
+	if(security.getAttention() >= 60.0):
+		level = "severe"
+	var guardID:String = witnesses[0].charID
+	for witness in witnesses:
+		if(witness.charID == victimID):
+			guardID = victimID
+	var delta:float = security.recordOffence(level, day)
+	var _set:bool = security.setPending(level, guardID, getSecurityNow())
+	var line:String = SecurityScript.attentionChangeText(delta, security.getAttention())
+	GM.main.addMessage(SecurityScript.colored("A guard saw you start that fight.", "yellow") + (" " + line if line != "" else ""))
+
+# The player forced someone (a FORCED encounter by Milestone 1's classification) and a guard who was not part of it saw. Coerced and unknown encounters never count.
+func recordWitnessedForcedSex(interaction) -> void:
+	if(!isSecurityReady() || interaction == null):
+		return
+	var participants:Array = interaction.involvedPawns.values()
+	var witnesses:Array = getGuardWitnesses(interaction.getLocation(), participants)
+	if(witnesses.empty()):
+		return
+	var security = getSecurity()
+	var delta:float = security.recordOffence("severe", GM.main.getDays())
+	var _set:bool = security.setPending("severe", witnesses[0].charID, getSecurityNow())
+	var line:String = SecurityScript.attentionChangeText(delta, security.getAttention())
+	GM.main.addMessage(SecurityScript.colored("A guard saw what you did.", "red") + (" " + line if line != "" else ""))
+
+# ---- Confrontation bookkeeping (called by the GuardEnforcement interaction) ----
+
+func onEnforcementStarted(kind:String, guardID:String) -> void:
+	var security = getSecurity()
+	var now:int = getSecurityNow()
+	security.beginEnforcement(now)
+	if(kind == "nudity_warn"):
+		security.issueNudityWarning(guardID, now)
+	if(kind == "search"):
+		security.markSearch(GM.main.getDays(), now, true)
+
+func onEnforcementEnded(resisted:bool) -> void:
+	if(!isSecurityReady()):
+		return
+	getSecurity().endEnforcement(getSecurityNow(), resisted)
+
+# The player chose to resist. Returns the message for the attention change.
+func onEnforcementResisted() -> String:
+	var security = getSecurity()
+	var delta:float = security.recordResistance(GM.main.getDays())
+	return SecurityScript.attentionChangeText(delta, security.getAttention())
+
+func onEnforcementWon() -> String:
+	var security = getSecurity()
+	var delta:float = security.recordWonAgainstGuard(GM.main.getDays())
+	security.clearPending()
+	return SecurityScript.attentionChangeText(delta, security.getAttention())
+
+# ---- Searching ----
+
+func looseItemEntry(item) -> Dictionary:
+	return {"key": item.uniqueID, "name": item.getVisibleName(), "amount": item.getAmount(), "illegal": item.hasTag(ItemTag.Illegal), "protected": item.isImportant() || item.isPersistent()}
+
+func hiddenRecordEntry(record:Dictionary) -> Dictionary:
+	var ref = GlobalRegistry.getItemRef(record["id"])
+	if(ref == null):
+		return {"key": record["uniqueID"], "name": str(record["id"]), "amount": 1, "illegal": false, "protected": true}
+	return {"key": record["uniqueID"], "name": ref.getVisibleName(), "amount": int(record["data"].get("amount", 1)), "illegal": ref.hasTag(ItemTag.Illegal), "protected": ref.isImportant() || ref.isPersistent()}
+
+# Searches what the player carries (loose items only: worn clothes and restraints are not touched). Confiscates BDCC's contraband (ItemTag.Illegal),
+# never important or persistent items, charges a fine of 1 to 3 credits (never more than the player has) and raises attention.
+# harshness: 0 complied, 1 gave in after resisting, 2 beaten after resisting. Returns {"found": bool, "taken": Array, "fine": int, "message": String}.
+func performPersonalSearch(guardID:String, harshness:int) -> Dictionary:
+	var guardName:String = characterName(guardID)
+	var inventory = GM.pc.getInventory()
+	var entries:Array = []
+	for item in inventory.getItems():
+		entries.append(looseItemEntry(item))
+	var taken:Array = SearchesScript.selectConfiscations(entries)
+	var security = getSecurity()
+	var day:int = GM.main.getDays()
+	security.markSearch(day, getSecurityNow(), false)
+	if(taken.empty()):
+		var emptyText:String = SearchesScript.personalSearchMessage(guardName, taken, 0, "")
+		security.setReport("A guard searched you and found nothing.")
+		return {"found": false, "taken": taken, "fine": 0, "message": emptyText}
+	for entry in taken:
+		var item = inventory.getItemByUniqueID(entry["key"])
+		if(item != null):
+			var _removed = inventory.removeItem(item)
+	var fine:int = SecurityScript.fineFor(taken.size(), security.recentContrabandCount(day), harshness, GM.pc.getCredits())
+	if(fine > 0):
+		GM.pc.addCredits(-fine)
+	var delta:float = security.recordOffence("contraband", day)
+	var attentionLine:String = SecurityScript.attentionChangeText(delta, security.getAttention())
+	var text:String = SearchesScript.personalSearchMessage(guardName, taken, fine, attentionLine)
+	security.setReport("A guard confiscated " + SearchesScript.describe(taken) + " in a search.")
+	return {"found": true, "taken": taken, "fine": fine, "message": text}
+
+# Searches the player's assigned cell: the ordinary stash always, the hidden compartment only when targeted and on a lucky roll.
+# Returns {"found": bool, "message": String}. The message is empty when the player has no cell.
+func performCellSearch(targeted:bool, hiddenRoll:float) -> Dictionary:
+	var stash = getStash()
+	var upgrades = getUpgrades()
+	var stashEntries:Array = []
+	if(stash != null):
+		for item in stash.getAllItems():
+			stashEntries.append(looseItemEntry(item))
+	var hiddenEntries:Array = []
+	for record in upgrades.getRecords():
+		hiddenEntries.append(hiddenRecordEntry(record))
+	var result:Dictionary = SearchesScript.cellSearch(stashEntries, hiddenEntries, targeted, hiddenRoll)
+	var security = getSecurity()
+	var day:int = GM.main.getDays()
+	security.markCellSearch(getSecurityNow())
+	var anything:bool = !result["stash"].empty() || !result["hidden"].empty()
+	for entry in result["stash"]:
+		var item = stash.getItemByUniqueID(entry["key"])
+		if(item != null):
+			var _removed = stash.removeItem(item)
+	for entry in result["hidden"]:
+		var _taken:Dictionary = upgrades.take(entry["key"])
+	var fine:int = 0
+	var attentionLine:String = ""
+	if(anything):
+		fine = SecurityScript.fineFor(result["stash"].size() + result["hidden"].size(), security.recentContrabandCount(day), 0, GM.pc.getCredits())
+		if(fine > 0):
+			GM.pc.addCredits(-fine)
+		attentionLine = SecurityScript.attentionChangeText(security.recordOffence("contraband", day), security.getAttention())
+	var text:String = SearchesScript.cellSearchMessage(result, fine, attentionLine)
+	security.setReport("Guards searched your cell" + (" and confiscated contraband." if anything else " and found nothing."))
+	return {"found": anything, "message": text}
+
+# Considered once a day, whether or not the player is around. Only the player's own assigned cell, and only if they have one.
+func runCellSearchIfDue(day:int, now:int) -> void:
+	if(!getCells().isAssigned("pc")):
+		return
+	var security = getSecurity()
+	var decision:Dictionary = security.decideCellSearch(day, now, 0.0, nextRoll())
+	if(!decision["search"]):
+		return
+	var result:Dictionary = performCellSearch(decision["targeted"], nextRoll())
+	GM.main.addMessage(result["message"])
+
+# A nudity fine after a warning was ignored: 1 credit at most, and the warning is cleared.
+func applyNudityFine(guardID:String) -> String:
+	var security = getSecurity()
+	var fine:int = int(min(1, GM.pc.getCredits()))
+	if(fine > 0):
+		GM.pc.addCredits(-fine)
+	security.clearWarning()
+	var delta:float = security.recordOffence("minor", GM.main.getDays())
+	var text:String = SecurityScript.colored(characterName(guardID) + " fines you for indecency.", "red")
+	if(fine > 0):
+		text += " " + SecurityScript.colored(str(fine) + " credit taken.", "red")
+	var line:String = SecurityScript.attentionChangeText(delta, security.getAttention())
+	return text + (" " + line if line != "" else "")

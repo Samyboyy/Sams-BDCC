@@ -10,6 +10,7 @@ const CellsScript = preload("res://Modules/SandboxOverhaulModule/Cells/Cells.gd"
 const InjuriesScript = preload("res://Modules/SandboxOverhaulModule/Injuries/Injuries.gd")
 const EmploymentScript = preload("res://Modules/SandboxOverhaulModule/Work/Employment.gd")
 const UpgradesScript = preload("res://Modules/SandboxOverhaulModule/Cells/CellUpgrades.gd")
+const SecurityScript = preload("res://Modules/SandboxOverhaulModule/Security/Security.gd")
 const CombatScript = preload("res://Modules/SandboxOverhaulModule/Relationships/CombatConsequences.gd")
 const RelationshipsScript = preload("res://Modules/SandboxOverhaulModule/Relationships/DirectedRelationships.gd")
 
@@ -19,6 +20,8 @@ var injuries
 var cells
 var employment
 var upgrades
+var security
+var securityBucket:int = -1 # last ten-minute bucket the guard check ran in (not saved)
 var scheduleBucket:int = -1 # last ten-minute bucket the nightly schedule ran in (not saved, so it runs again after a load)
 var ownerMainId: int = 0 # instance id of the MainScene the state belongs to (ids are never reused, pointers can be)
 
@@ -30,6 +33,7 @@ func _init():
 	cells = CellsScript.new(state)
 	employment = EmploymentScript.new(state)
 	upgrades = UpgradesScript.new(state)
+	security = SecurityScript.new(state)
 
 func register(_GES: GameExtenderSystem):
 	_GES.register(self, ExtendGame.saveLoadData)
@@ -42,6 +46,7 @@ func pcProcessTime(_pc, _seconds):
 	if(theModule != null):
 		theModule.onScheduleTick()
 		theModule.onWorkTick()
+		theModule.onSecurityTick()
 
 # Injuries heal with the player's hour counter, which runs on every time skip, so every character's injuries are processed here
 # (the NPC hour hook only reaches characters that are currently being simulated).
@@ -88,6 +93,11 @@ func getEmployment():
 func getUpgrades():
 	var _state = getState()
 	return upgrades
+
+# Security service, same lifetime rules as getRelationships.
+func getSecurity():
+	var _state = getState()
+	return security
 
 # Drops characters that definitely no longer exist. Does nothing without a live MainScene.
 func pruneMissingCharacters():

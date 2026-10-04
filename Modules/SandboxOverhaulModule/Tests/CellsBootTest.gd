@@ -440,7 +440,7 @@ func _ready():
 	var saved = JSON.parse(JSON.print(GM.GES.saveData())).result
 	var savedCells = saved["extendersData"]["SandboxGameExtender"]["cell_assignments"]
 	check(!savedCells.has("i02") and savedCells.has("i03") and savedCells.has("pc"), "a removed character is pruned before saving")
-	check(saved["extendersData"]["SandboxGameExtender"]["schema_version"] == 4 and saved["extendersData"]["SandboxGameExtender"]["known_cells"]["pc"].has("i04"), "saved at schema 4 with the known cells")
+	check(saved["extendersData"]["SandboxGameExtender"]["schema_version"] == 5 and saved["extendersData"]["SandboxGameExtender"]["known_cells"]["pc"].has("i04"), "saved at schema 5 with the known cells")
 	SandboxOverhaulModule.getState().clear()
 	GM.GES.loadData(JSON.parse(JSON.print(saved)).result)
 	check(SandboxOverhaulModule.getCells().getCell("i03")["cell"] == 2 and SandboxOverhaulModule.getCells().getCellmate("pc") == "i01" and SandboxOverhaulModule.getCells().knowsCell("pc", "i04"), "assignments and learned cells survive a load exactly")
@@ -453,7 +453,7 @@ func _ready():
 
 	# An older save without cells loads and creates them on first use
 	SandboxOverhaulModule.getState().loadData({"schema_version": 2, "injuries": {}})
-	check(SandboxOverhaulModule.getState().cell_assignments.empty() and SandboxOverhaulModule.getState().schema_version == 4, "an older save loads with no cells")
+	check(SandboxOverhaulModule.getState().cell_assignments.empty() and SandboxOverhaulModule.getState().schema_version == 5, "an older save loads with no cells")
 	check(module.refreshCells() > 0 and SandboxOverhaulModule.getCells().isAssigned("pc") and SandboxOverhaulModule.getCells().getCell("pc")["cell"] == 1, "and the cells are created on first use, the player first")
 
 	var main2 = load("res://Game/MainScene.gd").new()

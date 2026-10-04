@@ -98,3 +98,34 @@ get paid, then spend the credits on treatment (2 / 3 / 6), the cryopod or healin
   stamina when resting in the player's own cell (the "Rest" option; sleeping already restores everything). Deposits take any item carried loose in the inventory, including loose restraints (useful for contraband in the hidden compartment); they refuse worn or attached items (BDCC keeps worn items in the equipped slots), important items and persistent items, with a reason.
 - **Save data:** `SandboxState` schema 4 adds `work`, `upgrades` and `hidden_storage` (no copy of the stash). Older saves are unemployed with nothing bought; a new game resets everything.
 - **API on the module:** `getEmploymentState()`, `recordExcusedAbsence(reason)`, `isShiftCompleteToday()`, `getPurchasedUpgrades()`, `getStoredRecords(hidden)` (false: the real stash, true: the hidden compartment), `depositItem(item, hidden)`, `withdrawItem(uniqueID, hidden)`.
+
+## Guards, searches and proportional enforcement (Milestone 6)
+
+See `Security/Security.gd` (rules and cooldowns, no game access), `Security/Searches.gd` (what a search takes), `Interactions/GuardEnforcement.gd` (the scene) and the "Guards, searches and
+enforcement" section of `Module.gd`. The aim is tension, not constant policing: most conduct goes unseen or unremarked, and the player can get away with plenty.
+
+- **Security Attention** (0-100, one temporary value, not a reputation): Routine 0-19, Noticed 20-39, Watched 40-59, High alert 60-79, Priority target 80-100. Shown in Me > Security with a one-line
+  explanation, whether you were searched recently and any active warning (never any dice). Detected offences add attention: minor +4, contraband +10 (+5 per repeat find in 3 days, twice at most),
+  violent +20, severe +30; resisting a guard +15; beating one +25 but never above 85. It decays 4 a day, and 8 more a day after three incident-free days, and not at all while a confrontation is unresolved.
+- **Guard attitude** (lax, standard, strict): from the guard's own Mean personality stat plus a stable per-character offset (so it never changes on reload). Average guards are standard.
+  Staff Reputation (Respected is lenient, Troublemaker and Prison Menace draw scrutiny), the guard's Trust and Respect towards the player and Fear all move things a little (at most +-10 points of
+  chance). A guard whose Fear of the player is 60 or more will not confront them without backup; they do not become blind to it, the report just waits.
+- **Who sees what:** a guard sees what happens in their own room if they are not busy with something else (a victim always sees an attack on them). BDCC has no line of sight, so same-room presence is
+  the witness rule. Unwitnessed fights, forced encounters and contraband hidden in an inventory are never noticed; consensual, coerced and unknown-consent sex is never a crime. Nothing is ever started
+  during a story scene, a fight, sex, stocks, slavery, a dungeon run or any other interaction.
+- **Offences:** minor (a nudity warning), contraband (found in a search), violent (the player started a witnessed fight; attacked a guard), severe (a witnessed FORCED encounter, repeated attacks on
+  guards, violence at High alert or above). Violent and severe offences leave a report with the witnessing guard, who acts once the player is free (right after the fight, not in the middle of it).
+  Comply: a search and a small fine (severe also goes on to PunishInteraction). Resist: a fight. Win: nothing is taken, attention jumps, the guard is exhausted. Give in before the fight: milder than a
+  defeat. Surrender in the fight: the same. Beaten in the fight (pain or lust): searched, fined and sent to PunishInteraction. Milestone 2 and 3 consequences come from the normal fight path, once.
+- **Nudity:** exposed private parts by BDCC's own check (partial clothing is fine). Exempt: showers, bathrooms, the medical area, your own cell and solitary, the intro, any scene, anyone who cannot dress (bound
+  arms, blocked hands, nothing to put on). A guard may warn once (lax 10%, standard 35%, strict 65% at attention 0, a bit more with attention); the warning lasts three hours, a new one waits six, and only a
+  player who is still exposed after 20 minutes can be fined (1 credit at most, never below zero). Lax guards let it go.
+- **Personal searches:** only a guard in the same room, per encounter about 1% (standard, attention 0), 0.3% lax, 2.5% strict, times 1 + attention/25, at most 25%. At most one routine search a day, two days
+  apart (one day at High alert). A search takes loose contraband only (worn items are never touched), never important or persistent items, with a 1-3 credit fine (never more than you have) and one combined red
+  message. An empty search is green and costs nothing.
+- **Cell searches:** considered once a day for the player's assigned cell, from 2% (attention 0) to 15%, four days apart, whether or not the player is there; you get a report message. The ordinary stash is
+  searched; the hidden compartment is never found by a routine search, and a targeted one (High alert or above) finds it 12% of the time.
+- **Pacing:** grace of three hours after complying and six after resisting, half an hour between any two confrontations, a nudity cooldown, the daily search cap and the cell cooldown. Cooldowns stored in the
+  future (a corrupt save) count as over, and a confrontation flag with no interaction behind it is dropped.
+- **Not done:** guards dispersing NPC-versus-NPC fights (so the player keeps the chance to step in), nurses and engineers as enforcers, line of sight, the prison-snitch offer (gangs, later).
+- **Save data:** `SandboxState` schema 5 adds `security`. Older saves start at attention 0 with no cooldowns; a new game resets it.

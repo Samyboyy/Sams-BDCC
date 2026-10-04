@@ -113,6 +113,7 @@ func _run():
 		if(GlobalRegistry.getModule("SandboxOverhaulModule") != null):
 			addButton("Cells", "Your cell, your cellmate and the cells you have learned", "cellsMenu")
 			addButton("Work", "Your prison job, today's shift and your record", "workMenu")
+			addButton("Security", "How much attention prison security is paying to you", "securityMenu")
 		if(!GM.main.isInDungeon()):
 			addButton("Look for trouble", "Try to find an encounter", "lookfortrouble")
 		if(!getFlag("Game_PickedStartingPerks", false)):
@@ -184,6 +185,10 @@ func _run():
 
 	if(state == "workMenu"):
 		saynn(GlobalRegistry.getModule("SandboxOverhaulModule").getWorkScreenText())
+		addButton("Back", "Go back to the previous menu", "")
+
+	if(state == "securityMenu"):
+		saynn(GlobalRegistry.getModule("SandboxOverhaulModule").getSecurityScreenText())
 		addButton("Back", "Go back to the previous menu", "")
 
 	if(state == "reputationMenu"):
