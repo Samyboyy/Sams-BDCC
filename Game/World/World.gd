@@ -466,6 +466,10 @@ func updatePawn(worldPawn, pawn):
 	worldPawn.setPawnActivityIcon(pawn.getActivityIcon())
 	var theTagAndColor:Array = pawn.getPawnRelationshipTextAndColor()
 	worldPawn.setRelationshipText(theTagAndColor[0], theTagAndColor[1])
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null): # a second, independent badge for gang membership, next to the owner/friend/nemesis tag
+		var gangBadge:Dictionary = sandboxModule.getGangBadge(pawn.charID)
+		worldPawn.setGangBadge(gangBadge.get("text", ""), gangBadge.get("color", Color.white), gangBadge.get("tooltip", ""), !theTagAndColor[0].empty())
 
 func updatePawns(IS):
 	#var visiblePawns = {}

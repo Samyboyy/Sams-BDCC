@@ -109,8 +109,8 @@ registered by `SandboxGameExtender`) and the penalties (BDCC's own buff and dama
 ### 7. Cells, cellmates and the nightly routine (Milestone 4)
 
 Everything else is module-contained: the cell data, the schedule (the existing `pcProcessTime` game-extender hook, run at most once per ten in-game minutes),
-the cell directory scene, and the directory buttons, which a world edit (`WorldEdits/CellsWorldEdit.gd`) adds to the existing cell block rooms as `RoomAction`
-nodes, so the map scene is not edited. Base-game edits, all no-ops without `SandboxOverhaulModule`:
+and (since the Living Prison Repair Pass, entry 11) the cells themselves, which are real map rooms added by `WorldEdits/CellsWorldEdit.gd` through `GameWorld.addRoom`, so the map scene is not edited.
+The text directory that Milestone 4 first used (`CellDirectoryScene`, its room action and its "Look into" views) was removed. Base-game edits, all no-ops without `SandboxOverhaulModule`:
 
 - **`Game/InteractionSystem/InteractionSystem.gd` `trySpawnPawn()`:** after a random existing inmate is picked, `canSpawnPawn(id)` can veto the spawn while that
   inmate is still asleep in their cell (before their wake time). A module-only solution was not enough: nothing else sits between "pick an existing character"
@@ -126,10 +126,8 @@ Everything else is module-contained: the employment and upgrade services, the wo
 (job board, shift, cell upgrades), and the buttons, which a world edit (`WorldEdits/WorkWorldEdit.gd`) adds to the existing rooms (the canteen, the three workplaces and
 the player's cell) as `RoomAction` nodes, so no map scene is edited. Base-game edits, all no-ops without `SandboxOverhaulModule`:
 
-- **`Scenes/Mineshaft/WorkInMinesScene.gd`:** the vanilla 1 credit per "Work" click was unlimited wage farming (only stamina limited it). With the module, the credit is paid
-  once per day (`getInformalMiningPay()`); later sessions still mine, take the same stamina and time and still fire `Trigger.WorkingInMines`, they just pay nothing, and a message
-  says so. Without the module the credit is paid every time as before. `FirstTimeInMinesScene` (the story intro and its flag) is untouched. A module-only solution is not possible:
-  the credit is granted inside the scene.
+- **`Scenes/Mineshaft/WorkInMinesScene.gd`:** no longer edited. Milestone 5 limited the vanilla 1 credit mining click to once a day here; the Living Prison Repair Pass (entry 11) removed that informal
+  pay entirely and routes the mines through the mine worker's shift instead, so the file is back to its vanilla content (the story intro `FirstTimeInMinesScene` is untouched).
 - **`Scenes/MeScene.gd`:** a "Work" button in the main menu and a `workMenu` state that prints the module's job status text (the same place as the "Cells" button).
 - **`Scenes/RestingInCellScene.gd`:** after `afterRestingInBed()` in the `restuntil` branch, `afterRestInOwnCell(timePassed)` adds the better-bedding stamina bonus. This scene is only
   reachable from the player's own cell, and the module checks the location again.
@@ -156,3 +154,84 @@ One base-game edit, a no-op without `SandboxOverhaulModule`:
   "Cells" buttons. A module-only solution is not possible: the Me screen has no extension point.
 
 Deliberately **not** changed: `CaughtOffLimits` (the off-limits frisk, 5-credit fine and removal of worn illegal items stays as it was), `MainCheckpointScene` (the elevator checkpoint frisk), and every story scene.
+
+### 10. Gangs (Milestone 7)
+
+Almost everything is module-contained, with no map or story-scene edits:
+
+- **Hangouts:** the module registers four `GlobalTask`s in `postInit` (`GlobalRegistry.registerGlobalTask`) that send free daytime members to BDCC's own `HangoutAt` goal, and a world edit
+  (`WorldEdits/GangHangoutWorldEdit.gd`) puts each gang's hangout room into a `zone_gang<n>` group, which is how `HangoutAt` picks a room. The task is only ever given to a free pawn, so
+  bedtime, work, interactions, slavery and punishment always win.
+- **Fights:** the Milestone 2 hooks (`onUnprovokedAttack`, `onFightAftermath`) tell the gang code about attacks and results; gang incidents and retaliation start BDCC's own `GenericAttack`
+  interaction with a gang member as the starter, so combat reputation, injuries and the fight scene run once through the normal path.
+- **Protection:** `getAttackMultiplier` (already read by `PawnInteractionBase` since Milestone 2) is multiplied by the gang protection factor.
+- **Captives:** `isKeptElsewhere` and `canSpawnPawn` (the Milestone 4 hooks) know about held members, so the cell attendance shows them away and they are never picked to spawn.
+- **Slavery:** BDCC's slavery means "owned by the player" only (`NpcSlave`), so a gang's slaves are module state in `SandboxState.gangs`, never in BDCC's pools. When the player enslaves a gang's
+  member or slave the gang code notices (the character is `isSlaveToPlayer`) and drops them from its books, so no one has two owners.
+
+Base-game edits, both no-ops without `SandboxOverhaulModule`:
+
+- **`Game/InteractionSystem/Interactions/Talking.gd`:** a "Gangs" action in `init_text` (player talking to an NPC, score 0 so NPCs never pick it) and a `gangs` branch in `init_do` that runs the module's
+  `GangScene` with the NPC's ID (`runScene`). All the dialogue (are you in a gang, where do you meet, who leads, joining, jobs, inviting, leaving) lives in the scene, so no new Talking states are needed.
+- **`Scenes/MeScene.gd`:** a "Gangs" button in the main menu and a `gangsMenu` branch that runs the same scene without a character (the overview and the player's own gang options).
+
+A module-only solution was not possible for either: neither interaction nor the Me screen has an extension point.
+
+Deliberately **not** changed: the slavery, fight, cell, security, injury and economy systems, every story scene and every story character.
+
+### 11. Living Prison Repair Pass
+
+A quality gate after a real playtest showed that the overhaul stored simulation data the player never saw. Almost everything is module-contained: the physical cell rooms
+(`Prison/CellLayout.gd`, `CellRooms.gd`, `CellRoomHook.gd`, `WorldEdits/CellsWorldEdit.gd`, added through the existing `GameWorld.addRoom` and `addTransitions` API like the Drug Den does), the schedule and
+population director (`Prison/PrisonSchedule.gd`, `PopulationDirector.gd`, run from the existing `pcProcessTime` extender hook), NPC jobs (`Work/NpcJobs.gd`), workplace events (`Work/WorkEvents.gd`,
+`WorkEventGame.gd`), the gang screens (`Gangs/GangViews.gd`, `Scenes/GangScene.gd`), the reputation bar (`UI/SignedBar.gd`) and the mining consolidation. Sleeping inmates and workers are real pawns spawned
+through `InteractionSystem.spawnPawn` and sent with BDCC's own `HangoutAt` goal (each target room is put in a zone of its own), so they use the normal interaction system. Base-game edits, all no-ops
+without `SandboxOverhaulModule`:
+
+- **`Game/InteractionSystem/InteractionSystem.gd` `trySpawnPawn()`:** one new line asks the module `canSpawnPawnType(type)` before a random pawn is picked or generated. BDCC's spawner only knows a total pawn
+  limit (30) and the pawn types' weights, so guards, who are never asleep, took most of the slots (about ten guards and one inmate in the main area, measured on a real save). With the hook each kind is held
+  to its share of the limit (inmates 60%, guards 20%, nurses 10%, engineers 10%); nothing is added to the guard count. A module-only solution is not possible: the generated-character path never reaches
+  `canSpawnPawn`, and the type is only known inside this function. The existing `canSpawnPawn` call now reuses the same `sandboxModule` variable.
+- **`Events/Event/MinesHandlerEvent.gd`:** after the story introduction the vanilla "Work" button is replaced, when the module exists, by the module's `getMiningWorkButton()`: "Start mining shift" for a mine worker inside the
+  arrival window, otherwise a disabled button that says why ("You need to take the Mine worker job from the canteen job board."). The new `sandbox_shift` action runs the module's `WorkShiftScene`, which still fires
+  `Trigger.WorkingInMines`. The first-time story path is untouched. A module-only solution is not possible: the button belongs to this event, and a second room button would have left two ways to mine.
+- **`Game/InteractionSystem/Interactions/GenericAttack.gd`:** `getInterruptActions` and `doInterruptAction`, which only forward to the module. When two other people fight, the Look around screen offers "Help <name>" for each,
+  and "Break it up". Without the module the fight offers nothing, as before. A module-only solution is not possible: the interrupt actions of an interaction are defined by the interaction.
+  Limitation: BDCC's fight system has no three-way fights, so taking a side ends their fight and starts a fight between the player and the other person.
+- **`Game/InteractionSystem/Interactions/Talking.gd`:** one line under the feelings summary prints the job of an NPC the player has learned (or seen working), and a "Their work?" action (player to NPC, score 0)
+  with an `asked_job` state, the same pattern as "Which cell?". The job is deliberately not added to the NPC relationship row.
+- **`Scenes/MeScene.gd`:** the reputation screen's "Combat" block now calls `addReputationBars()` instead of printing text, which draws Combat Reputation and Defiance as -100..+100 bars with zero in the middle.
+- **`project.godot`:** global class registrations for the new module classes (the editor writes these itself; they are listed so a fresh checkout does not depend on the editor's cache).
+
+Not changed: the map scenes, the pawn types, the vanilla goals, every story scene and every story character. `Scenes/Mineshaft/WorkInMinesScene.gd` is back to vanilla (see entry 8).
+
+Registry cache note: BDCC caches its registry in `user://registryCache.json` when run from the editor, so after the cell directory scene was deleted a stale `CellDirectoryScene` entry can remain in an old cache. It is harmless (nothing opens
+it) and disappears with `-resetRegistryCache` or when the cache is rebuilt.
+
+### 12. Persistent NPC Lives
+
+Every inmate is now a real pawn that always exists and follows one stored daily plan (`Prison/DailyRoutine.gd`, `PresenceState.gd`, `PopulationDirector.gd`), whatever the player does or where the player stands. The module
+extender runs the director from the existing `pcProcessTime` hook. Base-game edits, all no-ops without `SandboxOverhaulModule`:
+
+- **`Game/InteractionSystem/AloneGoals/GoalSandboxRoutine.gd` (new file):** an `AloneInteraction` goal the director gives a pawn ("go to this room and do this"). It uses BDCC's own `goTowards` and path finding and
+  gets its activity text from the module. A new goal file is the only way to add a goal; nothing loads it unless the module assigns it.
+- **`Game/InteractionSystem/InteractionSystem.gd` `deleteAllNonImportantPawns()`:** pawns the module says to keep (`keepPawnAcrossDays`, the prison's inmates and staff) are not deleted at the start of a new day.
+- **`Game/InteractionSystem/InteractionSystem.gd` `spawnMorningWave()`:** the two-hour "no interactions" warm-up is skipped when `keepsPrisonersPersistent()` is true, because it walked sleeping inmates out of their
+  cells at 06:00 (measured as a jump of three rooms in one step). Random extra pawns are still spawned, now under the module's type budgets (`canSpawnPawnType`, see entry 11).
+- **`Game/World/World.gd` `updatePawn()` and `Game/World/WorldPawn.gd` `setGangBadge()`:** a second small label beside the Friend/Nemesis/Owner letter shows the gang badge (G green, blue, yellow, red) with a
+  tooltip. It is hidden unless the module supplies a badge.
+- **`Game/InteractionSystem/Interactions/GenericAttack.gd` `start()`:** one call tells the module an NPC fight began, so the module can offer the player a help request (once per fight). Nothing happens without the module.
+
+Not changed: the pawn classes, the other goals, staff spawning (staff are only held to the module's budgets, never added or removed by the director), every story scene and story character.
+
+### 13. Playtest correction pass (cells, load, work crews, gang flow)
+
+Almost everything is module-only (`WorldEdits/PopulationBootstrapWorldEdit.gd`, `Prison/CellRooms.gd`, `Prison/CellLayout.gd`, `Prison/PopulationDirector.gd`, `Gangs/GangDialogue.gd`, `Gangs/GangGame.gd`, `Scenes/GangScene.gd`, `Quests/*`). Base-game edits, all no-ops without `SandboxOverhaulModule`:
+
+- **`Game/InteractionSystem/Interactions/GenericAttack.gd` `sandboxPlayerSurrender()`:** it used to tell the module only when the *player* surrendered before a fight. It now also tells the module (`onNpcSurrender`) when an NPC the player attacked
+  gives up, so beating a gang assignment's target that way counts. A module-only solution is not possible: the choice happens inside this interaction.
+- **`Game/InteractionSystem/AloneGoals/GoalSandboxRoutine.gd`:** the "stay" action now takes two minutes instead of five, so a pawn notices a new plan segment within two minutes (needed for workers to set off on time).
+- **Quest log:** the module registers two ordinary `QuestBase` quests through its `quests` list (`Quests/GangAssignmentQuest.gd`, `Quests/GangAssignmentDoneQuest.gd`). The accepted gang assignment appears under Side tasks and, once reported, under Completed tasks. Nothing in `QuestLogScene` was changed.
+- **`project.godot`:** class registrations for `GangDialogue` and the two quest classes.
+
+Not changed: `World.gd` (the unreachable-cell bug was in the module's door flags, see the Relationships README), `MainScene.gd` (the load-time bootstrap is a world edit, which the game already applies when a game starts or loads).

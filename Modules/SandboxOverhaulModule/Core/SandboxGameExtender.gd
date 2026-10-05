@@ -11,6 +11,9 @@ const InjuriesScript = preload("res://Modules/SandboxOverhaulModule/Injuries/Inj
 const EmploymentScript = preload("res://Modules/SandboxOverhaulModule/Work/Employment.gd")
 const UpgradesScript = preload("res://Modules/SandboxOverhaulModule/Cells/CellUpgrades.gd")
 const SecurityScript = preload("res://Modules/SandboxOverhaulModule/Security/Security.gd")
+const NpcJobsScript = preload("res://Modules/SandboxOverhaulModule/Work/NpcJobs.gd")
+const GangsScript = preload("res://Modules/SandboxOverhaulModule/Gangs/Gangs.gd")
+const AffairsScript = preload("res://Modules/SandboxOverhaulModule/Gangs/GangAffairs.gd")
 const CombatScript = preload("res://Modules/SandboxOverhaulModule/Relationships/CombatConsequences.gd")
 const RelationshipsScript = preload("res://Modules/SandboxOverhaulModule/Relationships/DirectedRelationships.gd")
 
@@ -21,6 +24,11 @@ var cells
 var employment
 var upgrades
 var security
+var gangs
+var affairs
+var npcJobs
+var director:Dictionary = {} # the population director's memory (not saved; reset with every game)
+var gangBucket:int = -1 # last ten-minute bucket the gang check ran in (not saved)
 var securityBucket:int = -1 # last ten-minute bucket the guard check ran in (not saved)
 var scheduleBucket:int = -1 # last ten-minute bucket the nightly schedule ran in (not saved, so it runs again after a load)
 var ownerMainId: int = 0 # instance id of the MainScene the state belongs to (ids are never reused, pointers can be)
@@ -34,6 +42,9 @@ func _init():
 	employment = EmploymentScript.new(state)
 	upgrades = UpgradesScript.new(state)
 	security = SecurityScript.new(state)
+	gangs = GangsScript.new(state)
+	affairs = AffairsScript.new(state, gangs)
+	npcJobs = NpcJobsScript.new(state)
 
 func register(_GES: GameExtenderSystem):
 	_GES.register(self, ExtendGame.saveLoadData)
@@ -47,6 +58,8 @@ func pcProcessTime(_pc, _seconds):
 		theModule.onScheduleTick()
 		theModule.onWorkTick()
 		theModule.onSecurityTick()
+		theModule.onGangTick()
+		theModule.onPopulationTick()
 
 # Injuries heal with the player's hour counter, which runs on every time skip, so every character's injuries are processed here
 # (the NPC hour hook only reaches characters that are currently being simulated).
@@ -62,6 +75,7 @@ func getState():
 	if(ownerMainId != mainId):
 		ownerMainId = mainId
 		state.clear()
+		director = {}
 	return state
 
 # Same service instance for the whole run. It reads the state's current dictionaries, so it survives clear/load.
@@ -99,6 +113,20 @@ func getSecurity():
 	var _state = getState()
 	return security
 
+# Gang services, same lifetime rules as getRelationships.
+func getGangs():
+	var _state = getState()
+	return gangs
+
+func getGangAffairs():
+	var _state = getState()
+	return affairs
+
+# NPC jobs service, same lifetime rules as getRelationships.
+func getNpcJobs():
+	var _state = getState()
+	return npcJobs
+
 # Drops characters that definitely no longer exist. Does nothing without a live MainScene.
 func pruneMissingCharacters():
 	if(GM.main == null || !is_instance_valid(GM.main)):
@@ -112,6 +140,9 @@ func pruneMissingCharacters():
 	for characterID in cells.getCharacterIDs():
 		if(characterID != "pc" && GM.main.getCharacter(characterID) == null):
 			cells.removeCharacter(characterID)
+	for characterID in npcJobs.employedIDs():
+		if(GM.main.getCharacter(characterID) == null):
+			npcJobs.removeCharacter(characterID)
 	for characterID in injuries.getCharacterIDs():
 		if(characterID != "pc" && GM.main.getCharacter(characterID) == null):
 			injuries.removeCharacter(characterID)
@@ -126,3 +157,4 @@ func saveData():
 
 func loadData(_data):
 	getState().loadData(_data)
+	director = {} # a loaded game starts the director's memory again

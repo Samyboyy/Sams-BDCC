@@ -111,7 +111,7 @@ func _ready():
 	# ---- A new game: unemployed, nothing bought ----
 	check(!emp.isEmployed() and emp.getWarnings() == 0 and JSON.print(module.getPurchasedUpgrades()) == JSON.print(UpgradesScript.defaults()), "a new game is unemployed with nothing bought")
 	check(!module.isShiftCompleteToday() and module.getEmploymentState()["job"] == "" and module.getStoredRecords(false).empty() and module.getStoredRecords(true).empty(), "the API shows no job, no shift and empty stores")
-	check(module.getWorkScreenText().find("job board") != -1, "the Me screen points at the job board")
+	check(module.getWorkScreenText().find("You are unemployed. Visit the Job board in the canteen.") != -1, "the Me screen points at the job board")
 
 	# ---- World edit: job board, workplaces and the cell ----
 	var world = FakeWorld.new()
@@ -124,12 +124,12 @@ func _ready():
 	edit.applyAll(world)
 	check(world.rooms["hall_canteen"].get_child_count() == 1 and world.rooms["eng_workshop"].get_child_count() == 1 and world.rooms["cellblock_orange_playercell"].get_child_count() == 1, "each action is added once however often the edit applies")
 	var board = world.rooms["hall_canteen"].get_node("SandboxJobBoard")
-	var shiftMining = world.rooms["mining_shafts_entering"].get_node("SandboxStartShift")
 	var shiftLaundry = world.rooms["main_laundry"].get_node("SandboxStartShift")
+	check(world.rooms["mining_shafts_entering"].get_node_or_null("SandboxStartShift") == null, "the mines have no second workplace button: they use the mines event button")
 	var upgradesAction = world.rooms["cellblock_orange_playercell"].get_node("SandboxCellUpgrades")
-	check(board.ActionScene == "JobBoardScene" and shiftMining.ActionScene == "WorkShiftScene" and upgradesAction.ActionScene == "CellUpgradesScene" and board.ActionName == "Job board" and shiftMining.ActionName == "Start shift", "the actions open the module scenes")
-	check(board._shouldShow(), "the job board is always there")
-	check(!shiftMining._shouldShow() and !shiftLaundry._shouldShow(), "no Start shift without a job")
+	check(board.ActionScene == "JobBoardScene" and shiftLaundry.ActionScene == "WorkShiftScene" and upgradesAction.ActionScene == "CellUpgradesScene" and shiftLaundry.ActionName == "Start laundry shift", "the actions open the module scenes")
+	check(board._shouldShow() and board._canRun() and board.ActionName == "Job board (new!)", "the job board is always there and highlighted until it has been visited")
+	check(shiftLaundry._shouldShow() and !shiftLaundry._canRun() and shiftLaundry.ActionTooltip == "You need to take the Laundry hand job from the canteen job board.", "a workplace shows its shift button disabled, and says where to get the job: " + shiftLaundry.ActionTooltip)
 	thePlayer.location = "cellblock_orange_playercell"
 	check(upgradesAction._shouldShow(), "the cell upgrades show in the player's own cell")
 	thePlayer.location = "cellblock_orange_nearcell"
@@ -161,7 +161,7 @@ func _ready():
 	boardScene._react("doaccept", [])
 	check(emp.getJobID() == "mining", "rehired for the shift")
 	thePlayer.location = "mining_shafts_entering"
-	check(shiftMining._shouldShow() and !shiftLaundry._shouldShow(), "Start shift shows at the player's own workplace only")
+	check(module.getMiningWorkButton()["label"] == "Start mining shift" and !shiftLaundry._canRun() and shiftLaundry.ActionTooltip.find("not as a Laundry hand") != -1, "the mines button belongs to the mine worker; the laundry says it is not their job")
 	var credits = thePlayer.getCredits()
 	check(!module.startShift("mining")["ok"] and thePlayer.getCredits() == credits and !emp.isShiftCompleteToday(3), "before the window opens nothing is paid")
 	main.clearMessages()
@@ -200,30 +200,34 @@ func _ready():
 	var _l2 = module.leaveJob()
 	check(emp.getHistory()["completed"] == 1 and emp.getHistory()["wages"] == 3, "leaving keeps the history")
 
-	# ---- Informal mining pays once a day ----
-	check(module.getInformalMiningPay() == 1 and module.getInformalMiningPay() == 0 and module.getInformalMiningPay() == 0, "the vanilla credit is paid once a day")
+	# ---- One way to work the mines: the mine worker's shift, nothing informal ----
+	check(!module.has_method("getInformalMiningPay"), "the informal daily mining credit no longer exists")
 	setTime(7, 0, 4)
-	check(module.getInformalMiningPay() == 1, "and again the next day")
-	var mines = load("res://Scenes/Mineshaft/WorkInMinesScene.gd").new()
+	var minerButton = module.getMiningWorkButton()
+	check(!minerButton["enabled"] and minerButton["label"] == "Start mining shift" and minerButton["tooltip"] == "You need to take the Mine worker job from the canteen job board.", "no job: the mining button is disabled and says where the job is: " + minerButton["tooltip"])
+	var _l3 = module.acceptJob("workshop")
+	minerButton = module.getMiningWorkButton()
+	check(!minerButton["enabled"] and minerButton["tooltip"].find("not as a Mine worker") != -1, "another job: mining is not paid work for you: " + minerButton["tooltip"])
+	_l3 = module.leaveJob()
 	setTime(7, 0, 5)
-	credits = thePlayer.getCredits()
-	mines._react("work", [])
-	check(thePlayer.getCredits() == credits + 1, "the mining scene pays the first session of the day")
-	mines = load("res://Scenes/Mineshaft/WorkInMinesScene.gd").new()
-	setTime(7, 0, 5)
-	main.clearMessages()
-	mines._react("work", [])
-	mines._react("work", [])
-	check(thePlayer.getCredits() == credits + 1 and messagesText().find("earned nothing") != -1, "more sessions the same day still mine but pay nothing, and say so")
-	setTime(7, 0, 6)
-	credits = thePlayer.getCredits()
 	_l = module.acceptJob("mining")
-	setTime(8, 30, 6)
+	setTime(7, 30, 5)
+	minerButton = module.getMiningWorkButton()
+	check(!minerButton["enabled"] and minerButton["tooltip"].find("08:00-10:00") != -1, "before the window the shift window is named: " + minerButton["tooltip"])
+	setTime(8, 30, 5)
 	thePlayer.addStamina(100)
-	check(module.startShift("mining")["ok"] and thePlayer.getCredits() == credits + 3, "the shift pays its wage")
-	setTime(11, 0, 6)
-	mines._react("work", [])
-	check(thePlayer.getCredits() == credits + 3 + 1, "and the informal mining credit is still paid, once, on top")
+	minerButton = module.getMiningWorkButton()
+	check(minerButton["enabled"] and minerButton["tooltip"].find("3 credits") != -1, "inside the window the mine worker can start: " + minerButton["tooltip"])
+	credits = thePlayer.getCredits()
+	check(module.startShift("mining")["ok"] and thePlayer.getCredits() == credits + 3, "the shift pays its wage, once")
+	check(!module.startShift("mining")["ok"] and thePlayer.getCredits() == credits + 3, "and cannot be done twice")
+	minerButton = module.getMiningWorkButton()
+	check(!minerButton["enabled"] and minerButton["tooltip"].find("already finished") != -1, "after the shift the button says today's is done: " + minerButton["tooltip"])
+	setTime(11, 0, 5)
+	minerButton = module.getMiningWorkButton()
+	check(!minerButton["enabled"], "and stays disabled for the day")
+	var story = load("res://Events/Event/MinesHandlerEvent.gd").new()
+	check(story.has_method("onButton") and module.has_method("getMiningWorkButton"), "the mines handler event reads the module's button")
 	_l = module.leaveJob()
 
 	# ---- Missed, excused, dismissed through the real clock ----
@@ -517,7 +521,7 @@ func _ready():
 	ui.clearText()
 	shiftScene = newScene("res://Modules/SandboxOverhaulModule/Scenes/WorkShiftScene.gd")
 	shiftScene._run()
-	check(uiText(ui).find("not your workplace") != -1 and !buttonMap(ui).has("Start shift"), "another workplace says so")
+	check(uiText(ui).find("not as a Laundry hand") != -1 and buttonMap(ui).has("Start shift") and !buttonMap(ui)["Start shift"]["enabled"], "another workplace says it is not your job, and its shift button is disabled")
 	thePlayer.location = thePlayer.getCellLocation()
 	upScene = newScene("res://Modules/SandboxOverhaulModule/Scenes/CellUpgradesScene.gd")
 	ui.clearButtons()
@@ -546,7 +550,7 @@ func _ready():
 	var _w = module.startShift("laundry")
 	var saved = JSON.parse(JSON.print(GM.GES.saveData())).result
 	var sb = saved["extendersData"]["SandboxGameExtender"]
-	check(sb["schema_version"] == 5 and sb["work"]["job"] == "laundry" and sb["work"]["history"]["completed"] == 3 and sb["upgrades"]["storage"] == true and !sb.has("storage") and sb["hidden_storage"].size() == 1, "saved at schema 5 with the job, upgrades and the hidden compartment (the stash is not duplicated)")
+	check(sb["schema_version"] == 8 and sb["work"]["job"] == "laundry" and sb["work"]["history"]["completed"] == 3 and sb["upgrades"]["storage"] == true and !sb.has("storage") and sb["hidden_storage"].size() == 1, "saved at schema 8 with the job, upgrades and the hidden compartment (the stash is not duplicated)")
 	var workBefore = JSON.print(SandboxOverhaulModule.getState().work)
 	var _w2 = module.withdrawItem(stashIDs()[0], false)
 	var saveGag = GlobalRegistry.createItem("ballgag")
@@ -580,7 +584,7 @@ func _ready():
 
 	# ---- Old saves ----
 	SandboxOverhaulModule.getState().loadData({"schema_version": 3, "reputation": {"combat": 4.0, "defiance": 0.0}})
-	check(SandboxOverhaulModule.getState().schema_version == 5 and !SandboxOverhaulModule.getEmployment().isEmployed() and !SandboxOverhaulModule.getUpgrades().owns("storage"), "a version 3 save is unemployed with no upgrades")
+	check(SandboxOverhaulModule.getState().schema_version == 8 and !SandboxOverhaulModule.getEmployment().isEmployed() and !SandboxOverhaulModule.getUpgrades().owns("storage"), "a version 3 save is unemployed with no upgrades")
 	check(SandboxOverhaulModule.getCombat().getCombatReputation() == 4.0, "and keeps what it had")
 
 	# ---- New game ----

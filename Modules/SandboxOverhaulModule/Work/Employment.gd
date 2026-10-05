@@ -8,7 +8,7 @@ class_name Employment
 #   "shift": {"day", "job", "state", "eligible", "reminded"}   today's shift: state is "" (not started), "completed", "missed" or "excused"
 #   "warnings": int,                         consecutive warnings; a completed shift clears one, an unexcused miss adds one
 #   "dismissed_until": int,                  -1, or the first day the player may apply again
-#   "last_mining_pay_day": int,              the day the informal (no job) mining credit was last paid
+#   "board_seen": bool, "intro_shown": bool, whether the player has opened the job board / been told about it once
 #   "history": {"completed", "missed", "excused", "dismissals", "wages", "last_job"}   kept when leaving or being dismissed
 # }
 # One paid shift per day across all jobs: there is one shift record, and a job change keeps the day's result.
@@ -61,7 +61,7 @@ static func defaultShift() -> Dictionary:
 	return {"day": -1, "job": "", "state": "", "eligible": false, "reminded": false}
 
 static func defaults() -> Dictionary:
-	return {"job": "", "shift": defaultShift(), "warnings": 0, "dismissed_until": -1, "last_mining_pay_day": -1,
+	return {"job": "", "shift": defaultShift(), "warnings": 0, "dismissed_until": -1, "board_seen": false, "intro_shown": false,
 		"history": {"completed": 0, "missed": 0, "excused": 0, "dismissals": 0, "wages": 0, "last_job": ""}}
 
 static func sanitizeCount(value, default:int = 0) -> int:
@@ -89,8 +89,8 @@ static func sanitize(raw) -> Dictionary:
 	result["warnings"] = int(min(WARNINGS_TO_DISMISS - 1, sanitizeCount(raw.get("warnings"))))
 	if(isNumberValue(raw.get("dismissed_until"))):
 		result["dismissed_until"] = int(max(-1, round(float(raw["dismissed_until"]))))
-	if(isNumberValue(raw.get("last_mining_pay_day"))):
-		result["last_mining_pay_day"] = int(max(-1, round(float(raw["last_mining_pay_day"]))))
+	result["board_seen"] = typeof(raw.get("board_seen")) == TYPE_BOOL && raw["board_seen"]
+	result["intro_shown"] = typeof(raw.get("intro_shown")) == TYPE_BOOL && raw["intro_shown"]
 	var history = raw.get("history")
 	if(history is Dictionary):
 		for key in ["completed", "missed", "excused", "dismissals", "wages"]:
@@ -222,11 +222,41 @@ func recordExcused(day:int) -> bool:
 	state.work["history"]["excused"] += 1
 	return true
 
-# Informal mining pay: the vanilla credit is paid once per day. The ore is still mined afterwards, there is just no more pay.
-func claimInformalMiningPay(day:int) -> bool:
-	if(state.work["last_mining_pay_day"] == day):
+# Why this player can or cannot start a shift at this job's workplace right now: {"ok", "reason"}. Used by every workplace action, so the reason is always the
+# one that matters most: no job, a different job, today's shift done, the wrong time.
+func explainShift(jobID, day:int, timeOfDay) -> Dictionary:
+	if(!isValidJob(jobID)):
+		return {"ok": false, "reason": "There is no such job."}
+	if(!isEmployed()):
+		return {"ok": false, "reason": "You need to take the " + JOBS[jobID]["name"] + " job from the canteen job board."}
+	if(getJobID() != jobID):
+		return {"ok": false, "reason": "You work as a " + JOBS[getJobID()]["name"] + ", not as a " + JOBS[jobID]["name"] + ". Paid work here is not your job."}
+	return canStartShift(jobID, day, timeOfDay)
+
+# One more warning from something that happened at work (never enough on its own to dismiss: the limit is one short). False without a job.
+func addWarning() -> bool:
+	if(!isEmployed()):
 		return false
-	state.work["last_mining_pay_day"] = day
+	state.work["warnings"] = int(min(WARNINGS_TO_DISMISS - 1, int(state.work["warnings"]) + 1))
+	return true
+
+func hasSeenBoard() -> bool:
+	return bool(state.work["board_seen"])
+
+func markBoardSeen() -> void:
+	state.work["board_seen"] = true
+	state.work["intro_shown"] = true
+
+# The player has not been told yet that jobs exist (and has no reason to know).
+func isIntroPending() -> bool:
+	return !state.work["intro_shown"] && !state.work["board_seen"] && !isEmployed() && int(state.work["history"]["completed"]) == 0
+
+# True once, when the player should be told that jobs exist. Marks it as shown. Players who already work, or have a record, never see it.
+func claimIntro() -> bool:
+	if(state.work["intro_shown"] || state.work["board_seen"] || isEmployed() || int(state.work["history"]["completed"]) > 0):
+		state.work["intro_shown"] = true
+		return false
+	state.work["intro_shown"] = true
 	return true
 
 # ---- Time ----
@@ -324,7 +354,7 @@ func getStatusText(day:int, timeOfDay) -> String:
 	elif(isDismissed(day)):
 		lines.append("Job: none. You were dismissed and can apply again on day " + str(getReapplyDay()) + ".")
 	else:
-		lines.append("Job: none. The job board in the canteen lists what is open.")
+		lines.append("You are unemployed. Visit the Job board in the canteen.")
 	var warnings:int = getWarnings()
 	if(warnings > 0):
 		lines.append("[color=red]Warnings: " + str(warnings) + " of " + str(WARNINGS_TO_DISMISS) + "[/color] (a finished shift clears one; " + str(WARNINGS_TO_DISMISS) + " in a row means dismissal).")

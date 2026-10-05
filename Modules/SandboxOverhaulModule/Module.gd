@@ -12,7 +12,21 @@ const EmploymentScript = preload("res://Modules/SandboxOverhaulModule/Work/Emplo
 const UpgradesScript = preload("res://Modules/SandboxOverhaulModule/Cells/CellUpgrades.gd")
 const SecurityScript = preload("res://Modules/SandboxOverhaulModule/Security/Security.gd")
 const SearchesScript = preload("res://Modules/SandboxOverhaulModule/Security/Searches.gd")
+const NpcJobsScript = preload("res://Modules/SandboxOverhaulModule/Work/NpcJobs.gd")
+const PopulationScript = preload("res://Modules/SandboxOverhaulModule/Prison/PopulationDirector.gd")
+const ScheduleScript = preload("res://Modules/SandboxOverhaulModule/Prison/PrisonSchedule.gd")
+const CellLayoutScript = preload("res://Modules/SandboxOverhaulModule/Prison/CellLayout.gd")
+const WorkEventGameScript = preload("res://Modules/SandboxOverhaulModule/Work/WorkEventGame.gd")
+const WorkEventsScript = preload("res://Modules/SandboxOverhaulModule/Work/WorkEvents.gd")
+const SignedBarScript = preload("res://Modules/SandboxOverhaulModule/UI/SignedBar.gd")
+const DailyRoutineScript = preload("res://Modules/SandboxOverhaulModule/Prison/DailyRoutine.gd")
+const CellHookScript = preload("res://Modules/SandboxOverhaulModule/Prison/CellRoomHook.gd")
+const CellRoomsScript = preload("res://Modules/SandboxOverhaulModule/Prison/CellRooms.gd")
+const GangGameScript = preload("res://Modules/SandboxOverhaulModule/Gangs/GangGame.gd")
+const GANG_TASKS = ["res://Modules/SandboxOverhaulModule/Gangs/GangHangoutTask0.gd", "res://Modules/SandboxOverhaulModule/Gangs/GangHangoutTask1.gd", "res://Modules/SandboxOverhaulModule/Gangs/GangHangoutTask2.gd", "res://Modules/SandboxOverhaulModule/Gangs/GangHangoutTask3.gd"]
 const ENFORCEMENT_INTERACTION = "res://Modules/SandboxOverhaulModule/Interactions/GuardEnforcement.gd"
+const HELP_REQUEST_INTERACTION = "res://Modules/SandboxOverhaulModule/Interactions/HelpRequest.gd"
+const HelpRequestsScript = preload("res://Modules/SandboxOverhaulModule/Interactions/HelpRequests.gd")
 
 func _init():
 	id = "SandboxOverhaulModule"
@@ -23,15 +37,22 @@ func _init():
 	]
 
 	scenes = [
-		"res://Modules/SandboxOverhaulModule/Scenes/CellDirectoryScene.gd",
 		"res://Modules/SandboxOverhaulModule/Scenes/JobBoardScene.gd",
 		"res://Modules/SandboxOverhaulModule/Scenes/WorkShiftScene.gd",
 		"res://Modules/SandboxOverhaulModule/Scenes/CellUpgradesScene.gd",
+		"res://Modules/SandboxOverhaulModule/Scenes/GangScene.gd",
 	]
 
 	worldEdits = [
 		"res://Modules/SandboxOverhaulModule/WorldEdits/CellsWorldEdit.gd",
 		"res://Modules/SandboxOverhaulModule/WorldEdits/WorkWorldEdit.gd",
+		"res://Modules/SandboxOverhaulModule/WorldEdits/GangHangoutWorldEdit.gd",
+		"res://Modules/SandboxOverhaulModule/WorldEdits/PopulationBootstrapWorldEdit.gd", # last: it needs the cells and hangouts the other edits build
+	]
+
+	quests = [
+		"res://Modules/SandboxOverhaulModule/Quests/GangAssignmentQuest.gd",
+		"res://Modules/SandboxOverhaulModule/Quests/GangAssignmentDoneQuest.gd",
 	]
 
 	statusEffects = [
@@ -43,6 +64,9 @@ func _init():
 # Interactions cannot be listed in a module, so the guard confrontation registers itself once everything else is registered.
 func postInit():
 	GlobalRegistry.registerInteraction(ENFORCEMENT_INTERACTION)
+	GlobalRegistry.registerInteraction(HELP_REQUEST_INTERACTION)
+	for path in GANG_TASKS:
+		GlobalRegistry.registerGlobalTask(path)
 
 # Directed relationship service. Do not cache it across games; call this each time.
 static func getRelationships():
@@ -78,6 +102,19 @@ static func getUpgrades():
 static func getSecurity():
 	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
 	return extender.getSecurity()
+
+# Gang services. Do not cache them across games; call these each time.
+static func getGangs():
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	return extender.getGangs()
+
+static func getNpcJobs():
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	return extender.getNpcJobs()
+
+static func getGangAffairs():
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	return extender.getGangAffairs()
 
 # Active state. Resets itself when a different game (MainScene) is running.
 static func getState():
@@ -177,6 +214,7 @@ func runCombatOutcome(npcID, outcome:String, margin = -1.0) -> Dictionary:
 func onFightAftermath(interaction, wonID, lostID, result) -> void:
 	if(!(result is Dictionary) || !(wonID is String) || !(lostID is String) || (wonID == "pc") == (lostID == "pc")):
 		return
+	GangGameScript.onFightResult(wonID, lostID)
 	if(wonID == "pc"):
 		var _w:Dictionary = runCombatOutcome(lostID, CombatScript.WIN)
 		return
@@ -193,10 +231,17 @@ func onPlayerSurrender(interaction, npcID) -> void:
 	interaction.sandboxDefeatKind = CombatScript.DEFEAT_SURRENDERED
 	var _s:Dictionary = runCombatOutcome(npcID, CombatScript.SURRENDER)
 
+# An NPC the player attacked gave up before any fight (GenericAttack's surrender choice, which an NPC makes from fear or a poor chance). The player has beaten them for every gang purpose.
+func onNpcSurrender(npcID) -> void:
+	if(!isMainReady() || !(npcID is String) || npcID == "pc"):
+		return
+	GangGameScript.onFightResult("pc", npcID)
+
 # The player started an ordinary, unprovoked fight with this NPC.
 func onUnprovokedAttack(npcID) -> void:
 	var _u:Dictionary = runCombatOutcome(npcID, CombatScript.UNPROVOKED)
 	recordWitnessedViolence(npcID)
+	GangGameScript.onPlayerAttack(npcID)
 
 # Called by FightScene.sandboxFightEnded when the player ends a fight. Only Fight Club arena fights are consensual; every other scene
 # fight is ignored here (interaction fights are handled by onFightAftermath, scripted fights are left alone). The enemy surrendering
@@ -206,8 +251,12 @@ func onFightSceneEnded(enemyID, battleState, _submitter, battleName) -> void:
 		return
 	var _c:Dictionary = runCombatOutcome(enemyID, CombatScript.CONSENSUAL_WIN if battleState == "win" else CombatScript.CONSENSUAL_LOSS)
 
+# What the quest log shows for the player's gang assignment: archived false for the accepted job, true for the latest reported one. {"visible", "title", "lines"}.
+func getGangTaskView(archived:bool) -> Dictionary:
+	return GangGameScript.taskDoneView() if archived else GangGameScript.taskView()
+
 func getAttackMultiplier(npcID) -> float:
-	return getCombat().attackMultiplier(npcID)
+	return getCombat().attackMultiplier(npcID) * GangGameScript.protectionMultiplier(npcID)
 
 func getDefeatPunishMultiplier(kind) -> float:
 	return CombatScript.defeatPunishMultiplier(kind)
@@ -215,6 +264,24 @@ func getDefeatPunishMultiplier(kind) -> float:
 # Text for the reputation screen.
 func getReputationText() -> String:
 	return getCombat().describeReputation()
+
+# Draws Combat Reputation and Defiance as two signed bars (-100..+100, zero in the middle) on the current screen. Returns the two controls.
+func addReputationBars() -> Array:
+	var bars:Array = []
+	if(!isMainReady() || GM.ui == null):
+		return bars
+	var combat = getCombat()
+	var combatValue:float = combat.getCombatReputation()
+	var defianceValue:float = combat.getDefiance()
+	var combatBar = SignedBarScript.new()
+	combatBar.setup("Combat Reputation", combatValue, CombatScript.getCombatBand(combatValue), CombatScript.DESCRIPTION_COMBAT, "How capable and dangerous the prison believes you are in a fight. Zero is unproven; it moves with the fights you win, lose and avoid.")
+	var defianceBar = SignedBarScript.new()
+	defianceBar.setup("Defiance", defianceValue, CombatScript.getDefianceBand(defianceValue), CombatScript.DESCRIPTION_DEFIANCE, "How willing the prison believes you are to resist. It is neither good nor bad: it changes how guards and inmates treat you.")
+	GM.ui.addCustomControl("sandbox_rep_combat", combatBar)
+	GM.ui.addCustomControl("sandbox_rep_defiance", defianceBar)
+	bars.append(combatBar)
+	bars.append(defianceBar)
+	return bars
 
 # ---- Injuries (see CORE_PATCHES.md) ----
 
@@ -337,7 +404,60 @@ func getEligibleCellEntries() -> Array:
 
 # Gives every eligible inmate without a cell the first free place. Safe to call often; nobody who has a cell is ever moved.
 func refreshCells() -> int:
-	return getCells().ensureAssigned(getEligibleCellEntries())
+	var entries:Array = getEligibleCellEntries()
+	var placed:int = getCells().ensureAssigned(entries)
+	var _added:Array = ensureCellRooms(null, true, entries)
+	return placed
+
+# ---- Physical cells (see Prison/CellLayout.gd and CellRooms.gd) ----
+
+# The world and counts the cell rooms were last built for, so the check is cheap when nothing changed.
+var cellRoomsKey:String = ""
+
+# Builds any cell room the prison needs and does not have yet. world: defaults to the running world; wire: connect new rooms to the map (needed while the game runs).
+# Returns the IDs of the rooms added.
+func ensureCellRooms(world = null, wire:bool = false, entries = null) -> Array:
+	if(world == null):
+		world = GM.world if (GM != null && GM.get("world") != null && is_instance_valid(GM.world)) else null
+	if(world == null || GM.main == null || !is_instance_valid(GM.main)):
+		return []
+	if(entries == null):
+		entries = getEligibleCellEntries()
+	var counts:Dictionary = CellRoomsScript.wantedCounts(entries, getCells())
+	var key:String = str(world.get_instance_id()) + JSON.print(counts, "", true)
+	if(key == cellRoomsKey):
+		return []
+	var added:Array = CellRoomsScript.ensureRooms(world, counts, getCellHook(world), wire || CellRoomsScript.transitionsBuilt(world))
+	cellRoomsKey = key
+	return added
+
+# The node that receives the cell rooms' onPreEnter signal (see Prison/CellRoomHook.gd): one per map, added to it. A stand-in world that is not a node gets the module itself.
+func getCellHook(world):
+	if(!(world is Node)):
+		return self
+	var hook = world.get_node_or_null("SandboxCellHook")
+	if(hook == null):
+		hook = CellHookScript.new()
+		hook.name = "SandboxCellHook"
+		hook.module = self
+		world.add_child(hook)
+	return hook
+
+# Signal handler for a cell room's onPreEnter: the room header names who lives there; a cell that is not the player's gets a plain description.
+func onCellRoomPreEnter(room) -> void:
+	var info:Dictionary = CellLayoutScript.parse(room.roomID)
+	if(info.empty() || !isMainReady()):
+		return
+	var occupants:Array = getCells().getOccupants(info["block"], info["cell"])
+	var playerLives:bool = occupants.has("pc")
+	var names:Array = []
+	for occupant in occupants:
+		if(occupant != "pc"):
+			names.append(characterName(occupant))
+	room.roomName = CellLayoutScript.label(info["block"], info["cell"]) # short and fixed: the sidebar title never depends on a name
+	if(!playerLives):
+		room.roomDescription = CellRoomsScript.baseDescription(info["block"], info["cell"])
+	room.roomDescription += "\n\n" + CellRoomsScript.residentsLine(names, playerLives)
 
 func characterName(characterID) -> String:
 	if(characterID == "pc"):
@@ -385,7 +505,7 @@ func isKeptElsewhere(characterID) -> bool:
 	var theChar = GM.main.getCharacter(characterID)
 	if(theChar == null):
 		return false
-	return theChar.isSlaveToPlayer() || theChar.hasEnslaveQuest() || GM.main.RS.hasSpecialRelationshipID(characterID, "SoftSlavery")
+	return theChar.isSlaveToPlayer() || theChar.hasEnslaveQuest() || GM.main.RS.hasSpecialRelationshipID(characterID, "SoftSlavery") || getGangs().isCaptive(characterID) # captives and a gang's slaves are away at night
 
 # Home or away for tonight, "" outside the character's night or without a cell. A recorded state for tonight wins; without one it is worked out
 # now: a pawn that is still out, or a condition that keeps them elsewhere, means away; an inmate who is simply not spawned is assumed home.
@@ -396,10 +516,14 @@ func getAttendance(characterID) -> String:
 	var now:int = GM.main.getTime()
 	if(!theCells.isAssigned(characterID) || !CellsScript.isNight(characterID, now)):
 		return ""
+	var pawn = GM.main.IS.getPawn(characterID)
+	if(pawn != null):
+		# Home only when they are physically in their own cell. Anywhere else, the hall outside included, is away.
+		return "home" if pawn.getLocation() == homeRoomOf(characterID) else "away"
 	var recorded:String = theCells.getPresence(characterID, CellsScript.nightId(characterID, now, GM.main.getDays()))
 	if(recorded != ""):
 		return recorded
-	if(GM.main.IS.hasPawn(characterID) || isKeptElsewhere(characterID)):
+	if(isKeptElsewhere(characterID)):
 		return "away"
 	return "home"
 
@@ -409,11 +533,9 @@ func recordAttendance(characterID, presence:String) -> void:
 	if(theCells.getPresence(characterID, night) != presence):
 		var _ok:bool = theCells.setPresence(characterID, night, presence)
 
-# Sends inmates whose bedtime has come to their cells and records who is home and who is away for the night. A pawn that is busy is left alone,
-# marked away, and tried again at the next tick. A pawn near the player is made tired so BDCC's own "Leave" goal walks it back to its cell block before
-# it disappears (still away until it is gone); everyone else just goes (they are somewhere the player cannot see) and is home. An inmate with no pawn
-# is home unless something keeps them elsewhere. The player is never moved. Attendance of the previous night is dropped.
-# Returns {"despawned": [], "walking": [], "deferred": [], "home": [], "away": []}.
+# Records who is home and who is away for the night. Nobody is moved, sent or removed here any more: the population director walks every inmate to their cell with their daily plan, and an
+# inmate is home only once they are physically in their own cell. A pawn that is busy or still on the way is away, an inmate who has no pawn is home unless something keeps them elsewhere.
+# Attendance of the previous night is dropped. Returns {"despawned": [], "walking": [], "deferred": [], "home": [], "away": []} (despawned is always empty now).
 func sweepResidents() -> Dictionary:
 	var result:Dictionary = {"despawned": [], "walking": [], "deferred": [], "home": [], "away": []}
 	if(GM.main == null || !is_instance_valid(GM.main)):
@@ -426,36 +548,139 @@ func sweepResidents() -> Dictionary:
 	for characterID in theCells.state.cell_presence.keys():
 		if(!theCells.isAssigned(characterID) || !CellsScript.isNight(characterID, now) || theCells.getPresence(characterID, CellsScript.nightId(characterID, now, day)) == ""):
 			theCells.clearPresence(characterID)
-	# Pawns in the player's room, or within two rooms when the map is loaded, are walked home instead of vanishing.
-	var nearIDs:Array = []
-	if(GM.pc != null):
-		nearIDs = IS.getPawnIDsAt(GM.pc.getLocation())
-		if(GM.world != null):
-			nearIDs.append_array(IS.getPawnIDsNear(GM.pc.getLocation(), 2))
 	for characterID in theCells.getAssignedIDs():
 		if(characterID == "pc" || !CellsScript.isNight(characterID, now)):
 			continue
 		var pawn = IS.getPawn(characterID)
 		var presence:String = "home"
 		if(pawn != null):
-			presence = "away"
-			if(isPawnBlocked(pawn)):
-				result["deferred"].append(characterID)
-			elif(nearIDs.has(characterID)):
-				pawn.tiredness = max(pawn.tiredness, 1.5)
-				result["walking"].append(characterID)
-			else:
-				IS.deletePawn(characterID)
-				result["despawned"].append(characterID)
+			if(pawn.getLocation() == homeRoomOf(characterID)):
 				presence = "home"
+			else:
+				presence = "away"
+				if(isPawnBlocked(pawn)):
+					result["deferred"].append(characterID)
+				else:
+					result["walking"].append(characterID)
 		elif(isKeptElsewhere(characterID)):
 			presence = "away"
 		recordAttendance(characterID, presence)
 		result[presence].append(characterID)
 	return result
 
+# The room ID of the character's cell ("" without one).
+func homeRoomOf(characterID) -> String:
+	var entry:Dictionary = getCells().getCell(characterID)
+	if(entry.empty()):
+		return ""
+	return CellLayoutScript.roomID(entry["block"], entry["cell"])
+
+# ---- The living prison (see Prison/PopulationDirector.gd) ----
+
+# Called by the extender's pcProcessTime hook. The director decides by itself whether anything is due (ten-minute buckets and room changes).
+func onPopulationTick() -> void:
+	if(!isMainReady()):
+		return
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	var _summary:Dictionary = PopulationScript.tick(self, extender.director)
+
+# Called once when a game is loaded or started, after the map exists and before the player can see it (see WorldEdits/PopulationBootstrapWorldEdit.gd): assigns cells, builds the cell rooms,
+# and puts every inmate where today's plan has them (see PopulationDirector.bootstrap). Returns how many inmates were placed.
+func bootstrapPopulation(world) -> int:
+	if(!isMainReady() || GM.world != world || GM.main.IS == null):
+		return 0
+	var entries:Array = getEligibleCellEntries()
+	var _placed:int = getCells().ensureAssigned(entries)
+	var _added:Array = ensureCellRooms(world, false, entries)
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	var summary:Dictionary = PopulationScript.bootstrap(self, extender.director)
+	return summary["hydrated"].size() + summary["moved"].size()
+
+# Everyone the director places: the inmates with a home cell, never the player.
+func getDirectedInmateIDs() -> Array:
+	var ids:Array = []
+	for entry in getEligibleCellEntries():
+		if(entry[0] != "pc"):
+			ids.append(entry[0])
+	ids.sort()
+	return ids
+
+# Held somewhere else by something with priority over the prison's routine: slavery, a quest, a captor.
+func isHeldAway(characterID) -> bool:
+	return isKeptElsewhere(characterID) || getGangs().isDetained(characterID)
+
+# Can this inmate go to work today? Not when held away, hurt (a moderate or severe injury) or on one of their rare sick days.
+func isAvailableForWork(characterID, day:int) -> bool:
+	if(isHeldAway(characterID)):
+		return false
+	for type in InjuriesScript.TYPES:
+		if(getInjuries().getSeverity(characterID, type) >= InjuriesScript.MODERATE):
+			return false
+	return ScheduleScript.hashOf(characterID, "sick" + str(day)) % 100 >= PopulationScript.SICK_PERCENT
+
+# Used by InteractionSystem.trySpawnPawn: staff and inmates are only added while their kind is under its share of the pawn limit.
+func canSpawnPawnType(pawnTypeID) -> bool:
+	if(!isMainReady() || GM.main.IS == null):
+		return true
+	if(pawnTypeID == CharacterType.Inmate):
+		# Every inmate already has a pawn for good; BDCC may still bring new prisoners, up to a population that stays cheap to simulate and to draw.
+		return getDirectedInmateIDs().size() < POPULATION_CAP
+	var kind:String = ""
+	if(pawnTypeID == CharacterType.Guard):
+		kind = "guard"
+	elif(pawnTypeID == CharacterType.Nurse):
+		kind = "nurse"
+	elif(pawnTypeID == CharacterType.Engineer):
+		kind = "engineer"
+	else:
+		return true
+	var counts:Dictionary = PopulationScript.countByType(GM.main.IS)
+	var budget:Dictionary = ScheduleScript.budgets(GM.main.IS.getMaxPawnCount(), getDirectedInmateIDs().size())
+	return counts[kind] < budget[kind]
+
+# The most inmates the prison takes in: all of them are simulated and drawn all the time, so this keeps the cost bounded (60 were measured).
+const POPULATION_CAP = 45
+
+# Whether a pawn is kept from one day to the next (see InteractionSystem.deleteAllNonImportantPawns): the prison's inmates and staff are, so a new day never wipes the prison.
+func keepPawnAcrossDays(characterID) -> bool:
+	if(!isMainReady() || characterID == "pc"):
+		return false
+	var theChar = GM.main.getCharacter(characterID)
+	if(theChar == null):
+		return false
+	var kind = theChar.getCharacterType()
+	return kind == CharacterType.Inmate || kind == CharacterType.Guard || kind == CharacterType.Nurse || kind == CharacterType.Engineer
+
+# The map badge of a character's gang (see GangGame.badgeFor): {} for no badge.
+func getGangBadge(characterID) -> Dictionary:
+	if(!isMainReady()):
+		return {}
+	return GangGameScript.badgeFor(characterID)
+
+# The name of the gang an inmate meets at its hangout ("" when they are in none), for the text "hanging out with Ironhand".
+func hangoutLabel(characterID) -> String:
+	var gangs = getGangs()
+	var gid:String = gangs.gangOf(characterID)
+	return gangs.gangName(gid) if gid != "" else ""
+
+# True: the inmates and staff exist all the time, so BDCC's morning warm-up (which walks every pawn for a couple of hours) must not run over them.
+func keepsPrisonersPersistent() -> bool:
+	return true
+
+# What a pawn on its routine is doing, in BDCC's text with name placeholders. Built from the real activity (kind, whether the pawn has arrived), see GoalSandboxRoutine.
+func getRoutineText(kind:String, here:String, target:String, gangName:String) -> String:
+	var info:Dictionary = CellLayoutScript.parse(target)
+	var roomName:String = ""
+	if(GM.world != null && is_instance_valid(GM.world)):
+		var room = GM.world.getRoomByID(target)
+		roomName = room.roomName if room != null else ""
+	var placeText:String = DailyRoutineScript.placeName(kind, target, roomName)
+	return DailyRoutineScript.describe(kind, here, target, placeText, int(info.get("cell", 0)), gangName)
+
 # Used by InteractionSystem.trySpawnPawn so an inmate who should still be in their cell is not picked for a random appearance.
 func canSpawnPawn(characterID) -> bool:
+	if(GM.main != null && is_instance_valid(GM.main) && getGangs().isDetained(characterID)):
+		return false
 	if(GM.main == null || !is_instance_valid(GM.main) || !getCells().isAssigned(characterID)):
 		return true
 	return !CellsScript.isNight(characterID, GM.main.getTime())
@@ -517,38 +742,6 @@ func getKnownCellsText() -> String:
 func getCellsScreenText() -> String:
 	return getMyCellText() + "\n\n" + getKnownCellsText()
 
-const ROSTER_PAGE_SIZE = 8
-
-func getRosterPageCount(block) -> int:
-	var _placed:int = refreshCells()
-	return int(max(1, ceil(float(getCells().getOccupiedCellsInBlock(block).size()) / float(ROSTER_PAGE_SIZE))))
-
-# The cells on one page of a block's roster: [{"block", "cell", "occupants", "line"}].
-func getRosterPage(block, page:int) -> Array:
-	var _placed:int = refreshCells()
-	var all:Array = getCells().getOccupiedCellsInBlock(block)
-	var result:Array = []
-	for i in range(page * ROSTER_PAGE_SIZE, min(all.size(), (page + 1) * ROSTER_PAGE_SIZE)):
-		var entry:Dictionary = all[i].duplicate()
-		var names:Array = []
-		for occupant in entry["occupants"]:
-			names.append(occupantText(occupant))
-		entry["line"] = CellsScript.coloredCellLabel(entry["block"], entry["cell"]) + ": " + PoolStringArray(names).join(", ") + (" [color=" + CellsScript.COLOR_CELL + "](your cell)[/color]" if entry["occupants"].has("pc") else "")
-		result.append(entry)
-	return result
-
-# The text for looking into one cell: the shared interior, its occupants and whether they are there.
-func getCellViewText(block, cell:int) -> String:
-	var _placed:int = refreshCells()
-	var occupants:Array = getCells().getOccupants(block, cell)
-	var text:String = CellsScript.coloredCellLabel(block, cell) + "\nThe cell is a small metal room with an armored window and an automatic door, a stiff bed and a stool. The same as every other one."
-	if(occupants.empty()):
-		return text + "\nNobody is assigned to it."
-	var names:Array = []
-	for occupant in occupants:
-		names.append(occupantText(occupant))
-	return text + "\nAssigned: " + PoolStringArray(names).join(", ") + (".\nThis is your cell." if occupants.has("pc") else ".")
-
 # What an inmate says when asked which cell they live in. {"found": bool, "line": say text, "note": text for the player}.
 func getCellAnswer(npcID) -> Dictionary:
 	var _placed:int = refreshCells()
@@ -561,6 +754,102 @@ func getCellAnswer(npcID) -> Dictionary:
 func learnCell(npcID) -> bool:
 	var _placed:int = refreshCells()
 	return getCells().learnCell("pc", npcID)
+
+# ---- Fights between other people: taking a side or breaking it up (see CORE_PATCHES.md) ----
+
+# Called by GenericAttack when a fight between two other people starts: somebody bound to the player may ask them for help (see Interactions/HelpRequests.gd).
+func onNpcFightStarted(fight) -> void:
+	if(!isMainReady()):
+		return
+	var _asker:String = HelpRequestsScript.onFightStarted(self, fight)
+
+const BREAK_UP_COST = 10 # stamina
+
+# What the player can do about two other people fighting, offered by the Look around screen. Only for the player, only while neither fighter is the player and only for
+# a fight that has not been decided (or was just decided, to stop what comes after). Returns interrupt actions.
+func getFightInterruptActions(interaction, pawn) -> Array:
+	var actions:Array = []
+	if(pawn == null || !pawn.isPlayer() || interaction == null || interaction.wasDeleted || !isMainReady()):
+		return actions
+	var starter:String = interaction.getRoleID("starter")
+	var reacter:String = interaction.getRoleID("reacter")
+	if(starter == "" || reacter == "" || starter == "pc" || reacter == "pc"):
+		return actions
+	if(pawn.getChar() == null || pawn.getChar().getStamina() <= 0 || pawn.getInteraction() == null || pawn.getInteraction().id != "AloneInteraction"):
+		return actions
+	var state:String = interaction.getState()
+	if(state == ""):
+		actions.append({"id": "join_starter", "name": "Help " + characterName(starter), "desc": "Take " + characterName(starter) + "'s side and fight " + characterName(reacter), "score": 0.0, "args": {}})
+		actions.append({"id": "join_reacter", "name": "Help " + characterName(reacter), "desc": "Take " + characterName(reacter) + "'s side and fight " + characterName(starter), "score": 0.0, "args": {}})
+	if(state == "" || state == "starter_won" || state == "reacter_won"):
+		actions.append({"id": "break_up", "name": "Break it up", "desc": "Step between them and try to stop it. Whether they listen depends on how they see you. It costs " + str(BREAK_UP_COST) + " stamina.", "score": 0.0, "args": {}})
+	return actions
+
+# The chance that two fighters stop when the player steps in, from how much they fear and respect the player.
+func breakUpChance(starterID:String, reacterID:String) -> float:
+	var rel = getRelationships()
+	var fear:float = (rel.getFeeling(starterID, "pc", "fear") + rel.getFeeling(reacterID, "pc", "fear")) / 2.0
+	var respect:float = (rel.getFeeling(starterID, "pc", "respect") + rel.getFeeling(reacterID, "pc", "respect")) / 2.0
+	return clamp(0.35 + fear / 100.0 * 0.4 + respect / 100.0 * 0.3 + getCombat().getCombatReputation() / 400.0, 0.15, 0.85)
+
+# Applies the choice. Joining one side ends their fight and starts one between the player and the other fighter (the fight system has no three-way fights); breaking it up
+# either ends it or fails and costs stamina.
+func doFightInterruptAction(interaction, pawn, actionID) -> void:
+	if(pawn == null || !pawn.isPlayer() || interaction == null || interaction.wasDeleted || !isMainReady()):
+		return
+	var IS = GM.main.IS
+	var starter:String = interaction.getRoleID("starter")
+	var reacter:String = interaction.getRoleID("reacter")
+	if(starter == "" || reacter == "" || starter == "pc" || reacter == "pc"):
+		return
+	var rel = getRelationships()
+	if(str(actionID).begins_with("join_")):
+		var ally:String = starter if actionID == "join_starter" else reacter
+		var foe:String = reacter if ally == starter else starter
+		IS.stopInteraction(interaction)
+		var _a1:float = rel.adjustFeeling(ally, "pc", "trust", 6.0)
+		var _a2:float = rel.adjustFeeling(ally, "pc", "affection", 4.0)
+		var _f1:float = rel.adjustFeeling(foe, "pc", "affection", -6.0)
+		var _f2:float = rel.adjustFeeling(foe, "pc", "trust", -4.0)
+		GM.main.addMessage("You step in on " + characterName(ally) + "'s side. " + characterName(foe) + " turns on you.")
+		GangGameScript.onPlayerAttack(foe)
+		IS.startInteraction("GenericAttack", {"starter": "pc", "reacter": foe})
+	elif(actionID == "break_up"):
+		var chance:float = breakUpChance(starter, reacter)
+		pawn.getChar().addStamina(-BREAK_UP_COST)
+		if(nextRoll() < chance):
+			IS.stopInteraction(interaction)
+			for id in [starter, reacter]:
+				var other = IS.getPawn(id)
+				if(other != null):
+					other.afterSocialInteraction()
+				var _r:float = rel.adjustFeeling(id, "pc", "respect", 3.0)
+			GM.main.addMessage("You step between " + characterName(starter) + " and " + characterName(reacter) + " until they back off.")
+		else:
+			GM.main.addMessage(characterName(starter) + " and " + characterName(reacter) + " ignore you. You were shoved aside, and it carries on.")
+
+# ---- Other inmates' jobs (see Work/NpcJobs.gd) ----
+
+# "Alec works as a Laundry hand at the laundry." once the player knows it, otherwise "".
+func getKnownJobLine(npcID) -> String:
+	if(!isMainReady()):
+		return ""
+	var text:String = getNpcJobs().knownJobText(npcID)
+	return "" if text == "" else "[color=" + CellsScript.COLOR_NAME + "]" + characterName(npcID) + "[/color] works as a " + text + "."
+
+# What an inmate says when asked about their work. {"line": say text, "note": text for the player}. Being told is learning it.
+func getJobAnswer(npcID) -> Dictionary:
+	if(!isMainReady()):
+		return {"line": "...", "note": ""}
+	var jobs = getNpcJobs()
+	if(!jobs.isEmployed(npcID)):
+		return {"line": "No job. I get by.", "note": ""}
+	var jobID:String = jobs.getJob(npcID)
+	var job:Dictionary = EmploymentScript.JOBS[jobID]
+	return {"line": "I'm a " + str(job["name"]).to_lower() + ". " + str(job["workplace"]) + ", from about " + EmploymentScript.formatHour(int(job["open"])) + ".", "note": "[color=yellow]Job learned:[/color] " + characterName(npcID) + " works as a " + jobs.knownJobText(npcID) + "." if jobs.isKnown(npcID) else ""}
+
+func learnNpcJob(npcID) -> bool:
+	return isMainReady() && getNpcJobs().learn(npcID)
 
 # ---- Work, money and cell upgrades (see CORE_PATCHES.md) ----
 
@@ -594,10 +883,31 @@ func getBlockedReason() -> String:
 			return BLOCKING_INTERACTIONS[interaction.id]
 	return ""
 
+# The first time the player is out in the prison with no job and has not seen the board, they are told once where jobs are, and the canteen is marked on the map until
+# they have opened the board. Never repeated.
+func maybeIntroduceJobs() -> void:
+	var employment = getEmployment()
+	if(!employment.isIntroPending() || GM.world == null || !is_instance_valid(GM.world)):
+		return
+	var canteen = GM.world.getRoomByID("hall_canteen")
+	var here = GM.world.getRoomByID(GM.pc.getLocation())
+	if(canteen == null || here == null || here.getFloorID() != canteen.getFloorID()):
+		return
+	if(employment.claimIntro()):
+		GM.main.addMessage("[color=yellow]Work:[/color] Inmates can earn credits here. You are unemployed. Visit the Job board in the canteen.")
+		setBoardMarker(true)
+
+# Puts the canteen marker back after a load or a new map, for a player who has been told but has not opened the board.
+func refreshBoardMarker() -> void:
+	if(isMainReady()):
+		var employment = getEmployment()
+		setBoardMarker(!employment.hasSeenBoard() && !employment.isEmployed() && !employment.isIntroPending())
+
 # Called by the extender's pcProcessTime hook: reminders, missed and excused shifts, dismissals.
 func onWorkTick() -> void:
 	if(!isMainReady() || GM.main.isInDungeon()):
 		return
+	maybeIntroduceJobs()
 	var employment = getEmployment()
 	var day:int = GM.main.getDays()
 	var timeOfDay:int = GM.main.getTime()
@@ -652,15 +962,126 @@ func startShift(jobID) -> Dictionary:
 	var wage:int = employment.completeShift(jobID, day, timeOfDay)
 	if(wage <= 0):
 		return {"ok": false, "reason": "You have no shift to do today."}
+	var crew:Array = beginShiftCrew(jobID) # who is at the workplace as the shift begins, before any time passes
 	GM.pc.addCredits(wage)
 	GM.pc.addStamina(-int(EmploymentScript.JOBS[jobID]["stamina"]))
-	return {"ok": true, "reason": "", "wage": wage, "balance": GM.pc.getCredits(), "job": jobID}
+	return {"ok": true, "reason": "", "wage": wage, "balance": GM.pc.getCredits(), "job": jobID, "crew": crew}
 
-# The vanilla mining credit, paid once a day. Called by WorkInMinesScene: later sessions the same day still mine but earn nothing.
-func getInformalMiningPay() -> int:
+# ---- Who is at a workplace ----
+
+# The workers of a job who are standing in its room right now (real pawns, in the workplace).
+func presentCoworkers(jobID) -> Array:
+	var result:Array = []
+	if(!isMainReady() || !EmploymentScript.isValidJob(jobID) || GM.main.IS == null):
+		return result
+	var room:String = str(EmploymentScript.JOBS[jobID]["room"])
+	var day:int = GM.main.getDays()
+	for characterID in getNpcJobs().workers(jobID):
+		if(isHeldAway(characterID) || getGangs().isCaptive(characterID) || !isAvailableForWork(characterID, day)):
+			continue # somebody who is kept, hurt or off sick is not part of the crew even if they are standing in the room
+		var pawn = GM.main.IS.getPawn(characterID)
+		if(pawn != null && pawn.getLocation() == room):
+			result.append(characterID)
+	result.sort()
+	return result
+
+# A guard who is standing in the workplace, or "".
+func presentSupervisor(jobID) -> String:
+	if(!isMainReady() || !EmploymentScript.isValidJob(jobID) || GM.main.IS == null):
+		return ""
+	var guards:Array = []
+	for pawn in GM.main.IS.getPawnsAt(str(EmploymentScript.JOBS[jobID]["room"])):
+		if(pawn != null && !pawn.isPlayer() && pawn.isGuard()):
+			guards.append(pawn.charID)
+	guards.sort()
+	return guards[0] if !guards.empty() else ""
+
+# What the shift screen says about who is working there.
+func getCrewText(jobID) -> String:
+	var present:Array = presentCoworkers(jobID)
+	if(present.empty()):
+		return "Nobody else is working here at the moment."
+	var names:Array = []
+	for characterID in present:
+		names.append(characterName(characterID))
+	return "Working here now: " + CellLayoutScript.joinNames(names) + "."
+
+# The player's shift begins: the coworkers who are at the workplace stay and work it with the player, then pack up (see PopulationDirector.crewKind).
+func beginShiftCrew(jobID) -> Array:
+	var present:Array = presentCoworkers(jobID)
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	if(extender == null || present.empty()):
+		return present
+	var _state = extender.getState() # applies the new-game reset of the director's memory
+	var crews:Dictionary = extender.director.get("crews", {})
+	crews[str(jobID)] = {"ids": present.duplicate(), "end": PopulationScript.clockOf(GM.main.getDays(), GM.main.getTime()) + int(EmploymentScript.JOBS[jobID]["hours"]) * 3600}
+	extender.director["crews"] = crews
+	return present
+
+# ---- Workplace events (see Work/WorkEvents.gd) ----
+
+# Called when a shift has just been paid: may start an event. Returns the event, or {}.
+func rollWorkEvent(jobID, rolls:Array = []) -> Dictionary:
 	if(!isMainReady()):
-		return 1
-	return 1 if getEmployment().claimInformalMiningPay(GM.main.getDays()) else 0
+		return {}
+	return WorkEventGameScript.rollAfterShift(self, str(jobID), GM.main.getDays(), rolls)
+
+func getPendingWorkEvent() -> Dictionary:
+	if(!isMainReady()):
+		return {}
+	return getState().workplace["pending"].duplicate(true)
+
+# What the player is shown for an event: {"text", "choices": [{"id", "label", "tooltip"}]}.
+func getWorkEventView(event:Dictionary) -> Dictionary:
+	if(event.empty()):
+		return {"text": "", "choices": []}
+	return {"text": WorkEventsScript.describe(event, WorkEventGameScript.names(self, event)), "choices": WorkEventsScript.choices(event)}
+
+# Applies the player's choice once. Returns {"ok", "text", "fight": enemy ID or "", "event"}.
+func resolveWorkEvent(choiceID, rolls:Array = []) -> Dictionary:
+	if(!isMainReady()):
+		return {"ok": false, "text": "", "fight": ""}
+	return WorkEventGameScript.resolve(self, str(choiceID), rolls)
+
+func onWorkFightEnded(event:Dictionary, enemyID, result:Array) -> void:
+	if(!isMainReady() || !(enemyID is String)):
+		return
+	var won:bool = result.size() > 0 && result[0] == "win"
+	var _c:Dictionary = runCombatOutcome(enemyID, CombatScript.WIN if won else CombatScript.LOSS, result[2] if result.size() > 2 else -1.0)
+	GangGameScript.onFightResult("pc" if won else enemyID, enemyID if won else "pc")
+	WorkEventGameScript.onFightEnded(self, event, enemyID, result)
+
+# The only way to do paid work at a workplace: the same check everywhere (mining button, workplace actions). {"ok", "reason"}.
+func explainShift(jobID) -> Dictionary:
+	if(!isMainReady()):
+		return {"ok": false, "reason": "Not in a game."}
+	var check:Dictionary = getEmployment().explainShift(jobID, GM.main.getDays(), GM.main.getTime())
+	if(check["ok"] && GM.pc.getStamina() <= 0):
+		return {"ok": false, "reason": "You are too tired to work. Rest first."}
+	return check
+
+# Called by the mines handler event instead of the vanilla "Work" button (see CORE_PATCHES.md): there is exactly one way to work the mines for pay, and it is the mine
+# worker's shift. Returns {"enabled": bool, "label": text, "tooltip": text}.
+func getMiningWorkButton() -> Dictionary:
+	var check:Dictionary = explainShift("mining")
+	if(check["ok"]):
+		return {"enabled": true, "label": "Start mining shift", "tooltip": "Work about " + str(EmploymentScript.JOBS["mining"]["hours"]) + " hours for " + str(EmploymentScript.JOBS["mining"]["wage"]) + " credits. It costs " + str(EmploymentScript.JOBS["mining"]["stamina"]) + " stamina."}
+	return {"enabled": false, "label": "Start mining shift", "tooltip": check["reason"]}
+
+# The player opened the job board.
+func onJobBoardSeen() -> void:
+	if(!isMainReady()):
+		return
+	getEmployment().markBoardSeen()
+	setBoardMarker(false)
+
+# Shows or hides the map marker on the canteen (the existing mission marker) until the board has been visited.
+func setBoardMarker(visible:bool) -> void:
+	if(GM.world == null || !is_instance_valid(GM.world)):
+		return
+	var room = GM.world.getRoomByID("hall_canteen")
+	if(room != null && room.has_method("setMissionSpriteVisible")):
+		room.setMissionSpriteVisible(visible)
 
 # ---- Cell upgrades and storage ----
 
@@ -1141,3 +1562,9 @@ func applyNudityFine(guardID:String) -> String:
 		text += " " + SecurityScript.colored(str(fine) + " credit taken.", "red")
 	var line:String = SecurityScript.attentionChangeText(delta, security.getAttention())
 	return text + (" " + line if line != "" else "")
+
+# ---- Gangs (see CORE_PATCHES.md and Gangs/) ----
+
+# Every ten in-game minutes: set up, tidy, captives, jobs, the day's upkeep and any gang incident. All the rules live in GangGame.
+func onGangTick() -> void:
+	GangGameScript.tick()

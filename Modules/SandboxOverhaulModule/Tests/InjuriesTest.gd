@@ -142,7 +142,7 @@ func _init():
 	var t = StateScript.new()
 	var ti = InjuriesScript.new(t)
 	t.loadData(saved)
-	check(t.schema_version == 5 and ti.getSeverity("pc", "arm") == 2 and near(ti.getRemainingHours("pc", "arm"), 54.5) and ti.getSeverity("foe", "trauma") == 3 and near(ti.getRemainingHours("foe", "trauma"), 102.5), "save and load keep severity and exact remaining hours")
+	check(t.schema_version == 8 and ti.getSeverity("pc", "arm") == 2 and near(ti.getRemainingHours("pc", "arm"), 54.5) and ti.getSeverity("foe", "trauma") == 3 and near(ti.getRemainingHours("foe", "trauma"), 102.5), "save and load keep severity and exact remaining hours")
 	saved["injuries"]["pc"]["arm"]["remainingHours"] = 1.0
 	check(near(ti.getRemainingHours("pc", "arm"), 54.5), "no aliasing with the save")
 	t.clear()
@@ -150,11 +150,11 @@ func _init():
 
 	# Migration from the previous schema
 	t.loadData({"schema_version": 1, "cooldowns": {"k": 1}, "reputation": {"combat": 12, "defiance": 3}, "injuries": {"pc": {"arm": {"severity": 3, "remainingHours": 100}}}})
-	check(t.schema_version == 5 and t.injuries.empty() and t.cooldowns.has("k") and near(t.reputation["combat"], 12.0), "version 1 loads with no injuries, other data kept, stamped 3")
+	check(t.schema_version == 8 and t.injuries.empty() and t.cooldowns.has("k") and near(t.reputation["combat"], 12.0), "version 1 loads with no injuries, other data kept, stamped 3")
 	t.loadData({"cooldowns": {"k": 1}})
-	check(t.schema_version == 5 and t.injuries.empty(), "a save with no version and no injuries loads clean")
+	check(t.schema_version == 8 and t.injuries.empty(), "a save with no version and no injuries loads clean")
 	t.loadData({"schema_version": 2, "injuries": {"pc": {"arm": {"severity": 2, "remainingHours": 10}}}})
-	check(t.schema_version == 5 and t.injuries["pc"]["arm"]["severity"] == 2, "version 2 keeps its injuries")
+	check(t.schema_version == 8 and t.injuries["pc"]["arm"]["severity"] == 2, "version 2 keeps its injuries")
 	t.loadData({"schema_version": 99, "injuries": {"pc": {"arm": {"severity": 2, "remainingHours": 10}}}})
 	check(t.schema_version == 99 and t.injuries.has("pc"), "a newer schema is kept with its injuries")
 

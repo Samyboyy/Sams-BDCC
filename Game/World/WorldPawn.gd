@@ -65,6 +65,23 @@ func setPawnColor(theColor:Color):
 func setShowCollar(isShow:bool):
 	icon_3.visible = isShow
 
+# Sandbox overhaul: the gang badge ("G" in the colour of how that gang stands with the player), drawn beside the relationship tag. Created on first use, hidden when empty.
+var gangLabel:Label = null
+
+func setGangBadge(_text:String, _color:Color = Color.white, _tooltip:String = "", _afterTag:bool = false):
+	if(_text.empty() && gangLabel == null):
+		return
+	if(gangLabel == null):
+		gangLabel = Label.new()
+		gangLabel.mouse_filter = Control.MOUSE_FILTER_PASS
+		gangLabel.add_font_override("font", relationship_label.get_font("font"))
+		add_child(gangLabel)
+	gangLabel.visible = !_text.empty()
+	gangLabel.text = _text
+	gangLabel.hint_tooltip = _tooltip
+	gangLabel.rect_position = relationship_label.rect_position + Vector2(12.0 if _afterTag else 0.0, 0.0)
+	gangLabel.add_color_override("font_color", _color)
+
 func setRelationshipText(_text:String, _color:Color = Color.white):
 	if(_text.empty()):
 		relationship_label.visible = false

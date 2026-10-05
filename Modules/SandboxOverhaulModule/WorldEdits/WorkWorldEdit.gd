@@ -14,12 +14,17 @@ func _init():
 
 func apply(world: GameWorld):
 	applyAll(world)
+	var module = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(module != null):
+		module.refreshBoardMarker()
 
 # The edit itself, untyped so tests can pass a stand-in for the world.
 func applyAll(world):
 	addAction(world, BOARD_ROOM, "SandboxJobBoard", "board", "Job board", "See which prison jobs are open and manage yours", "JobBoardScene")
 	for jobID in EmploymentScript.JOB_ORDER:
-		addAction(world, EmploymentScript.JOBS[jobID]["room"], "SandboxStartShift", "shift", "Start shift", "Start your work shift here", "WorkShiftScene")
+		if(jobID == "mining"):
+			continue # the mines have their own button from the mines handler event (see CORE_PATCHES.md), so there is one way in, not two
+		addAction(world, EmploymentScript.JOBS[jobID]["room"], "SandboxStartShift", "shift", "Start " + str(EmploymentScript.JOBS[jobID]["workplace"]).to_lower() + " shift", "Start your work shift here", "WorkShiftScene")
 	for roomID in PLAYER_CELLS:
 		addAction(world, roomID, "SandboxCellUpgrades", "upgrades", "Cell upgrades", "Storage, a hidden compartment and better bedding for your cell", "CellUpgradesScene")
 

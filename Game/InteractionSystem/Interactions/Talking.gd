@@ -82,6 +82,8 @@ func init_text():
 		var feelingRole:String = "starter" if getRolePawn("reacter").isPlayer() else "reacter"
 		var otherRole:String = "reacter" if feelingRole == "starter" else "starter"
 		saynn("{"+feelingRole+".Your} feelings about {"+otherRole+".you}: "+sandboxModule.getFeelingsSummary(getRoleID(feelingRole), getRoleID(otherRole))+".")
+		if(getRolePawn(otherRole).isPlayer() && sandboxModule.getKnownJobLine(getRoleID(feelingRole)) != ""):
+			saynn(sandboxModule.getKnownJobLine(getRoleID(feelingRole)))
 	else:
 		saynn("{reacter.Your} affection with {starter.you} is "+getAffectionString("starter", "reacter")+".\nLust is "+getLustString("starter", "reacter")+".")
 
@@ -104,6 +106,9 @@ func init_text():
 			addAction("ask_cell", "Which cell?", "Ask which cell they live in", "default", 0.0, 30, {})
 		else:
 			addDisabledAction("Which cell?", "They don't seem to be in a chatty mood..")
+		if(getRolePawn("reacter").canSocial() && !isNemesisTo("reacter", "starter")):
+			addAction("ask_job", "Their work?", "Ask what work they do", "default", 0.0, 30, {})
+			addAction("gangs", "Gangs", "Talk about gangs: where they meet, joining, jobs", "default", 0.0, 30, {})
 	if(getRolePawn("reacter").canGrabAndFuck() && roleCanStartSex("starter")):
 		addAction("grab_and_fuck", "Grab&Fuck", "They have so many restraints that you can just fuck them..", "sexUse", 5.0, 60, {})
 	addAction("attack", "Attack", "Make them regret it!", "attack", 1.0 if (didAmount <= 0 || gotDenied) else 0.1, 30, {})
@@ -180,6 +185,11 @@ func init_do(_id:String, _args:Dictionary, _context:Dictionary):
 		didAmount += 1
 		gotDenied = false
 		setState("about_to_flirt", "starter")
+	if(_id == "gangs"):
+		runScene("GangScene", [getRoleID("reacter")])
+	if(_id == "ask_job"):
+		var _jobLearned:bool = GlobalRegistry.getModule("SandboxOverhaulModule").learnNpcJob(getRoleID("reacter"))
+		setState("asked_job", "starter")
 	if(_id == "ask_cell"):
 		var _learned:bool = GlobalRegistry.getModule("SandboxOverhaulModule").learnCell(getRoleID("reacter"))
 		setState("asked_cell", "starter")
@@ -224,6 +234,18 @@ func asked_cell_text():
 	addAction("continue", "Continue", "See what happens next..", "default", 1.0, 60, {})
 
 func asked_cell_do(_id:String, _args:Dictionary, _context:Dictionary):
+	if(_id == "continue"):
+		setState("", "starter")
+
+func asked_job_text():
+	var theJobAnswer:Dictionary = GlobalRegistry.getModule("SandboxOverhaulModule").getJobAnswer(getRoleID("reacter"))
+	saynn("{starter.You} {starter.youVerb('ask')} {reacter.name} what work {reacter.he} does.")
+	saynn("[say=reacter]" + theJobAnswer["line"] + "[/say]")
+	if(theJobAnswer["note"] != ""):
+		saynn(theJobAnswer["note"])
+	addAction("continue", "Continue", "See what happens next..", "default", 1.0, 60, {})
+
+func asked_job_do(_id:String, _args:Dictionary, _context:Dictionary):
 	if(_id == "continue"):
 		setState("", "starter")
 

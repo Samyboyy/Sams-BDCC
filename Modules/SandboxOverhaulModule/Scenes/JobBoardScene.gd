@@ -14,6 +14,7 @@ func _run():
 	var module = GlobalRegistry.getModule("SandboxOverhaulModule")
 	var employment = module.getEmployment()
 	var day:int = GM.main.getDays()
+	module.onJobBoardSeen()
 	if(state == ""):
 		saynn("[b]Job board[/b]\nA scratched notice board by the canteen counter lists the jobs open to inmates. Pay is in work credits, one paid shift a day, and you can only hold one job.")
 		saynn(module.getWorkScreenText())

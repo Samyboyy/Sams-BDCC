@@ -143,12 +143,34 @@ func _init():
 	events = emp.tick(50, hours(12), "")
 	check(wage == 3 and events.empty() and emp.getHistory()["missed"] == 0, "a shift started at the end of the window and finished after it is not missed")
 
-	# ---- Informal mining ----
+	# ---- One way to work: the same explanation everywhere ----
 	m = make()
 	emp = m[1]
-	check(emp.claimInformalMiningPay(1) and !emp.claimInformalMiningPay(1) and !emp.claimInformalMiningPay(1) and emp.claimInformalMiningPay(2), "informal mining pays once a day")
-	_r = emp.accept("mining", 2, hours(7))
-	check(emp.completeShift("mining", 2, hours(8)) == 3 and !emp.claimInformalMiningPay(2), "informal pay does not use up the shift, and the shift does not reopen informal pay")
+	var noJob = emp.explainShift("mining", 1, hours(8))
+	check(!noJob["ok"] and noJob["reason"] == "You need to take the Mine worker job from the canteen job board.", "no job: the mines say where to get one: " + noJob["reason"])
+	check(emp.explainShift("workshop", 1, hours(11))["reason"] == "You need to take the Workshop hand job from the canteen job board.", "and so does every workplace")
+	_r = emp.accept("workshop", 2, hours(7))
+	var otherJob = emp.explainShift("mining", 2, hours(8))
+	check(!otherJob["ok"] and otherJob["reason"].find("not as a Mine worker") != -1 and otherJob["reason"].find("Workshop hand") != -1, "another job: mining is not paid work for you: " + otherJob["reason"])
+	_r = emp.leave(2)
+	_r = emp.accept("mining", 3, hours(7))
+	check(emp.explainShift("mining", 3, hours(7))["reason"].find("08:00-10:00") != -1 and !emp.explainShift("mining", 3, hours(7))["ok"], "before the window: the window is named")
+	check(emp.explainShift("mining", 3, hours(8))["ok"] and emp.explainShift("mining", 3, hours(9))["ok"], "inside the window the shift can start")
+	check(emp.explainShift("mining", 3, hours(10))["reason"].find("closed") != -1, "after the window it has closed")
+	check(emp.completeShift("mining", 3, hours(8)) == 3, "the one wage")
+	check(!emp.explainShift("mining", 3, hours(8))["ok"] and emp.explainShift("mining", 3, hours(8))["reason"].find("already finished") != -1, "after the shift: today's is done")
+	check(emp.explainShift("mining", 4, hours(8))["ok"] == false and emp.explainShift("mining", 4, hours(8))["reason"].find("no shift") != -1 or emp.explainShift("mining", 4, hours(8))["ok"] == false, "the next day has no shift until the clock opens it")
+	check(!emp.explainShift("pirate", 3, hours(8))["ok"], "an unknown job is refused")
+	check(emp.getStatusText(3, hours(8)).find("unemployed") == -1, "an employed player is not told they are unemployed")
+	m = make()
+	check(m[1].getStatusText(1, hours(8)) .find("You are unemployed. Visit the Job board in the canteen.") != -1, "the Me screen tells an unemployed player where to go")
+	check(m[1].isIntroPending() and m[1].claimIntro() and !m[1].claimIntro() and !m[1].isIntroPending(), "the introduction is claimed exactly once")
+	m = make()
+	m[1].markBoardSeen()
+	check(!m[1].isIntroPending() and !m[1].claimIntro() and m[1].hasSeenBoard(), "visiting the board ends the introduction for good")
+	m = make()
+	_r = m[1].accept("laundry", 1, hours(7))
+	check(!m[1].isIntroPending() and !m[1].claimIntro(), "a player who already works is never introduced")
 
 	# ---- Text ----
 	m = make()
@@ -167,11 +189,11 @@ func _init():
 
 	# ---- Sanitising ----
 	check(JSON.print(EmploymentScript.sanitize(null)) == JSON.print(EmploymentScript.defaults()) and JSON.print(EmploymentScript.sanitize("x")) == JSON.print(EmploymentScript.defaults()) and JSON.print(EmploymentScript.sanitize({})) == JSON.print(EmploymentScript.defaults()), "garbage becomes the defaults")
-	var dirty = {"job": "pirate", "shift": {"day": "x", "job": "mining", "state": "weird", "eligible": "yes", "reminded": 1}, "warnings": 9, "dismissed_until": "later", "last_mining_pay_day": -50, "history": {"completed": -4, "missed": "x", "excused": 2.6, "dismissals": null, "wages": 7, "last_job": "pirate"}}
+	var dirty = {"job": "pirate", "shift": {"day": "x", "job": "mining", "state": "weird", "eligible": "yes", "reminded": 1}, "warnings": 9, "dismissed_until": "later", "board_seen": "yes", "intro_shown": 1, "history": {"completed": -4, "missed": "x", "excused": 2.6, "dismissals": null, "wages": 7, "last_job": "pirate"}}
 	var clean = EmploymentScript.sanitize(dirty)
-	check(clean["job"] == "" and JSON.print(clean["shift"]) == JSON.print(EmploymentScript.defaultShift()) and clean["warnings"] == 2 and clean["dismissed_until"] == -1 and clean["last_mining_pay_day"] == -1, "bad fields are repaired")
+	check(clean["job"] == "" and JSON.print(clean["shift"]) == JSON.print(EmploymentScript.defaultShift()) and clean["warnings"] == 2 and clean["dismissed_until"] == -1 and clean["board_seen"] == false and clean["intro_shown"] == false, "bad fields are repaired")
 	check(clean["history"]["completed"] == 0 and clean["history"]["missed"] == 0 and clean["history"]["excused"] == 3 and clean["history"]["wages"] == 7 and clean["history"]["last_job"] == "", "history counts are clamped and cleaned")
-	var good = {"job": "laundry", "shift": {"day": 4, "job": "laundry", "state": "missed", "eligible": true, "reminded": true}, "warnings": 1, "dismissed_until": -1, "last_mining_pay_day": 3, "history": {"completed": 5, "missed": 2, "excused": 1, "dismissals": 1, "wages": 31, "last_job": "mining"}}
+	var good = {"job": "laundry", "shift": {"day": 4, "job": "laundry", "state": "missed", "eligible": true, "reminded": true}, "warnings": 1, "dismissed_until": -1, "board_seen": true, "intro_shown": true, "history": {"completed": 5, "missed": 2, "excused": 1, "dismissals": 1, "wages": 31, "last_job": "mining"}}
 	clean = EmploymentScript.sanitize(good)
 	check(JSON.print(clean) == JSON.print(good), "a valid record survives unchanged")
 	clean["history"]["completed"] = 99
@@ -233,7 +255,7 @@ func _init():
 	check(s.upgrades["hidden"] and !s.upgrades["storage"], "the hidden compartment and the locker are separate purchases")
 
 	# ---- State: schema 4, save and load ----
-	check(s.schema_version == 5 and StateScript.CURRENT_SCHEMA_VERSION == 5, "schema 5")
+	check(s.schema_version == 8 and StateScript.CURRENT_SCHEMA_VERSION == 8, "schema 6")
 	var saved = JSON.parse(JSON.print(s.saveData())).result
 	var t = StateScript.new()
 	t.loadData(saved)
@@ -245,7 +267,6 @@ func _init():
 	emp = m[1]
 	_r = emp.accept("mining", 3, hours(7))
 	_w = emp.completeShift("mining", 3, hours(8))
-	var _x = emp.claimInformalMiningPay(3)
 	_r = emp.tick(4, hours(11), "")
 	saved = JSON.parse(JSON.print(s.saveData())).result
 	t = StateScript.new()
@@ -263,9 +284,9 @@ func _init():
 	# Older saves: unemployed, nothing bought, nothing stored
 	var oldState = StateScript.new()
 	oldState.loadData({"schema_version": 3, "work": {"job": "mining"}, "upgrades": {"storage": true}, "hidden_storage": [record("a", "y")], "reputation": {"combat": 5.0, "defiance": 0.0}})
-	check(oldState.schema_version == 5 and oldState.work["job"] == "" and !oldState.upgrades["storage"] and oldState.hidden_storage.empty(), "a version 3 save is unemployed with no upgrades, even if it has stray fields")
+	check(oldState.schema_version == 8 and oldState.work["job"] == "" and !oldState.upgrades["storage"] and oldState.hidden_storage.empty(), "a version 3 save is unemployed with no upgrades, even if it has stray fields")
 	oldState.loadData({"schema_version": 1})
-	check(oldState.schema_version == 5 and JSON.print(oldState.work) == JSON.print(EmploymentScript.defaults()) and !oldState.upgrades["comfort"], "a version 1 save migrates")
+	check(oldState.schema_version == 8 and JSON.print(oldState.work) == JSON.print(EmploymentScript.defaults()) and !oldState.upgrades["comfort"], "a version 1 save migrates")
 	oldState.loadData({"schema_version": 99, "work": {"job": "mining"}})
 	check(oldState.schema_version == 99, "a newer save keeps its version")
 	oldState.loadData({"schema_version": 4, "work": "junk", "upgrades": [1], "hidden_storage": {"a": 1}})

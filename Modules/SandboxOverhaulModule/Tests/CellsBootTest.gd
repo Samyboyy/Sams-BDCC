@@ -40,14 +40,6 @@ class FakeAlone:
 class FakeGoal:
 	var id = ""
 
-class FakeRoom extends Node2D:
-	pass
-
-class FakeWorld:
-	var rooms = {}
-	func getRoomByID(roomID):
-		return rooms.get(roomID)
-
 func check(cond: bool, msg: String):
 	if(!cond):
 		failures += 1
@@ -161,196 +153,52 @@ func _ready():
 	check(module.isInCell("pc"), "the player is in their cell when standing in it")
 	setTime(23)
 	check(module.isInCell("i01") and module.getMyCellText().find("in the cell") != -1, "at night the cellmate (no pawn out) is in the cell")
-	var page = module.getRosterPage("orange", 0)
-	check(page.size() == 3 and page[0]["cell"] == 1 and page[0]["line"].find("(your cell)") != -1 and page[0]["line"].find("[color=green]You[/color]") != -1 and page[1]["line"].find("[color=green]i02[/color]") != -1, "the roster lists cells with occupants and marks the player's: " + str(page[0]["line"]))
-	check(module.getRosterPageCount("orange") == 1 and module.getRosterPage("red", 0).size() == 2 and module.getRosterPage("lilac", 0)[0]["occupants"] == ["i06"], "other blocks have their own roster")
-	var view = module.getCellViewText("orange", 1)
-	check(view.find("[color=cyan]Orange 1[/color]") != -1 and view.find("This is your cell.") != -1 and module.getCellViewText("orange", 3).find("i07") != -1 and module.getCellViewText("orange", 99).find("Nobody is assigned") != -1, "the shared cell view names occupants")
 	thePlayer.location = "cellblock_orange_nearcell"
 
-	# ---- Scene and world edit plumbing ----
-	var scene = load("res://Modules/SandboxOverhaulModule/Scenes/CellDirectoryScene.gd").new()
-	thePlayer.location = "cellblock_red_nearcell"
-	scene._initScene([])
-	check(scene.block == "red" and scene.state == "", "in a hall the scene opens that block's roster")
-	thePlayer.location = "cellblock_orange_playercell"
-	scene = load("res://Modules/SandboxOverhaulModule/Scenes/CellDirectoryScene.gd").new()
-	scene._initScene([])
-	check(scene.state == "cell" and scene.viewedCell == 1 and scene.block == "orange", "in the player's cell the scene opens that cell")
-	scene._react("viewcell", [3])
-	check(scene.state == "cell" and scene.viewedCell == 3, "choosing a cell shows it")
-	scene._react("directory", [])
-	check(scene.state == "", "and back to the directory")
-	scene._react("nextpage", [])
-	scene._react("prevpage", [])
-	scene._react("prevpage", [])
-	check(scene.page == 0, "paging is clamped")
-	var world = FakeWorld.new()
-	var edit = GlobalRegistry.getWorldEdit("SandboxCellsWorldEdit")
-	for roomID in edit.HALLS + edit.PLAYER_CELLS:
-		var room = FakeRoom.new()
-		world.rooms[roomID] = room
-	edit.addAction(world, "cellblock_orange_nearcell", "Cell directory", "tip", false)
-	edit.addAction(world, "cellblock_orange_nearcell", "Cell directory", "tip", false)
-	edit.addAction(world, "cellblock_orange_playercell", "Cell info", "tip", true)
-	edit.addAction(world, "missing_room", "x", "x", false)
-	var hallAction = world.rooms["cellblock_orange_nearcell"].get_node_or_null("SandboxCellAction")
-	var cellAction = world.rooms["cellblock_orange_playercell"].get_node_or_null("SandboxCellAction")
-	check(hallAction != null and world.rooms["cellblock_orange_nearcell"].get_child_count() == 1, "the action is added once however often the edit applies")
-	check(hallAction.ActionScene == "CellDirectoryScene" and hallAction._shouldShow() == true, "block halls always show the directory")
-	check(cellAction._shouldShow() == true, "the player's own cell shows its info")
-	thePlayer.location = "cellblock_red_nearcell"
-	check(cellAction._shouldShow() == false, "another cell does not")
-	for roomID in world.rooms:
-		world.rooms[roomID].free()
-
-	# ---- The nightly schedule on real pawns ----
+	# ---- Attendance on real pawns: home only when physically in the cell ----
 	var ids = []
 	for i in range(1, 9):
 		ids.append("i0" + str(i))
-	var early = ids[0]
-	var late = ids[0]
-	for id in ids:
-		if(CellsScript.bedtimeSeconds(id) < CellsScript.bedtimeSeconds(early)):
-			early = id
-		if(CellsScript.bedtimeSeconds(id) > CellsScript.bedtimeSeconds(late)):
-			late = id
-	check(CellsScript.bedtimeSeconds(early) < CellsScript.bedtimeSeconds(late), "setup: two inmates with different bedtimes")
 	thePlayer.location = "main_hall_somewhere"
 	var extender = GlobalRegistry.getGameExtender("SandboxGameExtender")
-	var farPawns = {}
-	for id in ids:
-		farPawns[id] = addPawn(id, "far_" + id)
+	var stateRef = SandboxOverhaulModule.getState()
 	addPawn("pc", "main_hall_somewhere")
-
-	# Before bedtime nothing is forced
+	# Before bedtime nothing is recorded
 	setTime(19, 0, 5)
 	extender.scheduleBucket = -1
 	module.onScheduleTick()
-	check(IS.pawns.size() == 9, "before bedtime no pawn is moved")
-
-	# At the early inmate's bedtime only those whose bedtime has come settle
-	var tEarly = CellsScript.bedtimeSeconds(early)
-	main.timeOfDay = tEarly
-	main.currentDay = 5
-	extender.scheduleBucket = -1
-	module.onScheduleTick()
-	var settled = 0
+	check(stateRef.cell_presence.empty(), "before bedtime no attendance is recorded")
 	for id in ids:
-		if(!IS.hasPawn(id)):
-			settled += 1
-			check(CellsScript.isNight(id, tEarly), id + " only settles once its own bedtime has come")
-	check(!IS.hasPawn(early) and settled >= 1 and settled < 8 and IS.hasPawn(late), "the prison settles gradually: " + str(settled) + " of 8 gone at the first bedtime")
-	check(IS.hasPawn("pc"), "the player is never moved")
-	var countAfterFirst = IS.pawns.size()
-	module.onScheduleTick()
-	check(IS.pawns.size() == countAfterFirst, "running again in the same ten minutes does nothing")
-	addPawn("i99", "far_i99")
-	main.timeOfDay = tEarly + 60
-	module.onScheduleTick()
-	check(IS.hasPawn("i99"), "an unassigned character is not swept")
-
-	# Late evening: everybody is in
-	setTime(22, 30, 5)
-	module.onScheduleTick()
-	var remaining = []
-	for id in ids:
-		if(IS.hasPawn(id)):
-			remaining.append(id)
-	check(remaining.empty(), "overnight no inmate is out: " + str(remaining))
-	for id in ids:
-		check(module.isInCell(id) and !module.hasFailedToReturn(id), id + " is in their cell at night")
-	check(module.canSpawnPawn("i01") == false and module.canSpawnPawn("guard1") == true and module.canSpawnPawn("i99") == true, "a sleeping inmate is not spawned; others are")
-
-	# Blocked pawns defer and return once free
-	setTime(21, 30, 6)
-	var blockedKinds = {}
-	for id in ["i01", "i02", "i03", "i04", "i05", "i06"]:
-		blockedKinds[id] = addPawn(id, "far_" + id)
-	blockedKinds["i01"].currentInteraction = FakeInteraction.new()
-	var healer = FakeAlone.new()
-	healer.goal = FakeGoal.new()
-	healer.goal.id = "GetHealed"
-	blockedKinds["i02"].currentInteraction = healer
-	var idle = FakeAlone.new()
-	idle.goal = FakeGoal.new()
-	idle.goal.id = "Wander"
-	blockedKinds["i03"].currentInteraction = idle
-	main.timeOfDay = 23 * 3600 + 30 * 60 + 600
+		check(module.getAttendance(id) == "" and !module.isInCell(id) and !module.hasFailedToReturn(id), id + ": no attendance before bedtime")
+	# At night an inmate with no pawn is home; one whose pawn is anywhere but their own cell is away; one in their own cell is home
+	setTime(23, 30, 5)
+	for id in ["i01", "i02", "i03"]:
+		check(module.getAttendance(id) == "home" and module.isInCell(id) and !module.hasFailedToReturn(id), id + ": no pawn, no reason to be out: home")
+	var hallPawn = addPawn("i01", "cellblock_orange_nearcell")
+	var _cellPawn = addPawn("i02", module.homeRoomOf("i02"))
+	var farPawn = addPawn("i03", "far_i03")
 	extender.scheduleBucket = -1
-	module.onScheduleTick()
-	check(IS.hasPawn("i01") and IS.hasPawn("i02"), "a pawn in an interaction or a priority goal is deferred, not removed")
-	check(!IS.hasPawn("i03") and !IS.hasPawn("i04"), "an idle pawn wandering goes home")
-	check(module.hasFailedToReturn("i01") and module.hasFailedToReturn("i02") and !module.isInCell("i01"), "later systems can see who has not come back")
-	check(blockedKinds["i01"].currentInteraction != null, "the active interaction is untouched")
-	main.timeOfDay += 600
-	module.onScheduleTick()
-	check(IS.hasPawn("i01") and IS.hasPawn("i02"), "still deferred at the next tick while busy, without errors")
-	blockedKinds["i01"].currentInteraction = null
-	healer.goal.id = "Wander"
-	main.timeOfDay += 600
-	module.onScheduleTick()
-	check(!IS.hasPawn("i01") and !IS.hasPawn("i02"), "once available they go home during the night")
-	var _slavePawn = addPawn("slave1", "far_s")
-	var _storyPawn = addPawn("story1", "far_t")
-	main.timeOfDay += 600
-	module.onScheduleTick()
-	check(IS.hasPawn("slave1") and IS.hasPawn("story1"), "a busy slave and a character without a cell are left alone")
-	IS.pawns.erase("slave1") # the stub slave has no slavery data, so remove it without the normal delete
-	IS.pawnsByLoc["far_s"].erase("slave1")
-	IS.deletePawn("story1")
+	var sweep = module.sweepResidents()
+	check(module.getAttendance("i01") == "away" and module.hasFailedToReturn("i01") and !module.isInCell("i01"), "a pawn still in the hall outside the cell is away, not home")
+	check(module.getAttendance("i02") == "home" and module.isInCell("i02") and !module.hasFailedToReturn("i02"), "a pawn that is in its own cell is home")
+	check(module.getAttendance("i03") == "away" and sweep["walking"].has("i03") and sweep["walking"].has("i01") and sweep["home"].has("i02") and sweep["despawned"].empty(), "the sweep records them and removes nobody")
+	check(IS.hasPawn("i01") and IS.hasPawn("i02") and IS.hasPawn("i03"), "nobody is removed from the world")
+	farPawn.currentInteraction = FakeInteraction.new()
+	module.sweepResidents()
+	check(module.getAttendance("i03") == "away" and module.sweepResidents()["deferred"].has("i03"), "a busy pawn is away and deferred")
+	farPawn.currentInteraction = null
+	# Arrival makes them home, and only then
+	hallPawn.setLocation(module.homeRoomOf("i01"))
+	check(module.getAttendance("i01") == "home" and module.isInCell("i01"), "once they walk into their cell they are home")
+	check(module.canSpawnPawn("i01") == false and module.canSpawnPawn("guard1") == true and module.canSpawnPawn("i99") == true, "a sleeping inmate is not picked for a random appearance; others are")
+	IS.deletePawn("i01")
+	IS.deletePawn("i02")
+	IS.deletePawn("i03")
 
-	# A pawn in the player's room walks home through BDCC's own Leave goal instead of vanishing
-	thePlayer.location = "hall_x"
-	var near = addPawn("i05", "hall_x")
-	near.tiredness = 0.0
-	main.timeOfDay += 600
-	module.onScheduleTick()
-	check(IS.hasPawn("i05") and near.tiredness >= 1.5, "a pawn in front of the player stays visible and is made tired so it walks off")
-	near.tiredness = 0.0
-	IS.deletePawn("i05")
-
-	# Morning
-	setTime(6, 30, 7)
-	check(module.canSpawnPawn("i01") == (!CellsScript.isNight("i01", 6 * 3600 + 30 * 60)), "spawning follows the wake time")
-	setTime(8, 0, 7)
-	for id in ids:
-		check(module.canSpawnPawn(id) and !module.isInCell(id), id + " may leave the cell after the wake window")
-	var _morningPawn = addPawn("i04", "main_stairs1")
-	extender.scheduleBucket = -1
-	module.onScheduleTick()
-	check(IS.hasPawn("i04"), "daytime pawns are not touched")
-	IS.deletePawn("i04")
-	# Crossing midnight and a long skip: the result depends only on the time
-	setTime(0, 40, 8)
-	addPawn("i04", "far_a")
-	extender.scheduleBucket = -1
-	module.onScheduleTick()
-	check(!IS.hasPawn("i04"), "after midnight inmates are still settled")
-
-	# ---- Attendance: home, away and failed to return ----
-	for id in IS.pawns.keys():
-		if(id != "pc"):
-			IS.deletePawn(id)
+	# ---- Home, away and failed to return for inmates something keeps elsewhere ----
 	SandboxOverhaulModule.getState().cell_presence.clear()
-	var stateRef = SandboxOverhaulModule.getState()
-
-	# An ordinary unspawned inmate is assumed home after bedtime; before bedtime nobody has failed to return
-	setTime(19, 0, 9)
-	var _outPawn = addPawn("i06", "far_i06")
-	check(module.getAttendance("i06") == "" and !module.hasFailedToReturn("i06") and !module.isInCell("i06"), "before bedtime there is no attendance and nobody has failed to return, even if out")
-	IS.deletePawn("i06")
-	setTime(22, 30, 9)
-	extender.scheduleBucket = -1
-	module.onScheduleTick()
-	check(module.getAttendance("i06") == "home" and module.isInCell("i06") and !module.hasFailedToReturn("i06"), "an ordinary unspawned inmate is home after bedtime")
-	check(stateRef.cell_presence["i06"]["state"] == "home" and stateRef.cell_presence["i06"]["night"] == 9, "and it is recorded for tonight")
-
-	# An unspawned enslaved inmate is away, not home, and keeps their cell
 	check(module.getAttendance("slave1") == "away" and !module.isInCell("slave1") and module.hasFailedToReturn("slave1"), "an unspawned enslaved inmate is away")
 	check(cells.getCell("slave1")["cell"] == 2 and cells.getCell("slave1")["block"] == "red", "and keeps their assigned cell")
-
-	# Enslaving the player's cellmate keeps the cell; they stop returning; freeing keeps it too
 	var mateCell = JSON.print(stateRef.cell_assignments["i01"])
 	var assignmentsBefore = JSON.print(stateRef.cell_assignments)
 	check(module.getAttendance("i01") == "home", "setup: the cellmate is home")
@@ -360,52 +208,26 @@ func _ready():
 	main.addDynamicCharacterToPool("i01", CharacterPool.Slaves)
 	check(module.refreshCells() == 0 and JSON.print(stateRef.cell_assignments) == assignmentsBefore, "enslaving the cellmate changes no assignment")
 	check(module.getPlayerCellmate() == "i01" and JSON.print(stateRef.cell_assignments["i01"]) == mateCell, "the player's cellmate is still that person")
-	extender.scheduleBucket = -1
 	setTime(22, 40, 9)
-	module.onScheduleTick()
 	check(module.getAttendance("i01") == "away" and !module.isInCell("i01") and module.hasFailedToReturn("i01"), "the enslaved cellmate is now away, so the player can notice")
 	check(module.getMyCellText().find("[color=green]i01[/color] (" + "[color=#c8b560]not here[/color])") != -1, "the player's cell text shows the missing cellmate: " + module.getMyCellText())
-	check(module.getRosterPage("orange", 0)[0]["line"].find("not here") != -1 and module.getCellViewText("orange", 1).find("not here") != -1, "the directory and the cell view show it too")
 	mate.slaveFlag = false
 	main.removeDynamicCharacterFromAllPools("i01")
 	main.addDynamicCharacterToPool("i01", CharacterPool.Inmates)
 	check(module.refreshCells() == 0 and JSON.print(stateRef.cell_assignments) == assignmentsBefore, "freeing them creates no new cell")
-	extender.scheduleBucket = -1
 	setTime(22, 50, 9)
-	module.onScheduleTick()
-	check(module.getAttendance("i01") == "home" and module.isInCell("i01") and !module.hasFailedToReturn("i01"), "once free and unspawned they are home again")
-
+	check(module.getAttendance("i01") == "home" and module.isInCell("i01") and !module.hasFailedToReturn("i01"), "once free and without a pawn they are home again")
 	# A newly encountered, already enslaved inmate gets a cell
 	var _newSlave = addNpc("i11", CharacterPool.Slaves, InmateType.HighSec, true)
 	check(module.refreshCells() == 1 and cells.isAssigned("i11"), "a new enslaved inmate gets a cell")
 	check(JSON.print(stateRef.cell_assignments["i03"]) == JSON.print({"block": "orange", "cell": 2}) and cells.getCell("pc")["cell"] == 1, "nobody else moved")
 	removeNpc("i11")
 	cells.removeCharacter("i11")
-
-	# A spawned blocked inmate is away; they become home once the blocker ends and they settle
-	var busy = addPawn("i07", "far_i07")
-	busy.currentInteraction = FakeInteraction.new()
-	extender.scheduleBucket = -1
-	setTime(23, 0, 9)
-	module.onScheduleTick()
-	check(IS.hasPawn("i07") and module.getAttendance("i07") == "away" and !module.isInCell("i07") and module.hasFailedToReturn("i07"), "a blocked inmate is away after bedtime")
-	check(stateRef.cell_presence["i07"]["state"] == "away", "recorded as away")
-	busy.currentInteraction = null
-	setTime(23, 10, 9)
-	module.onScheduleTick()
-	check(!IS.hasPawn("i07") and module.getAttendance("i07") == "home" and module.isInCell("i07") and !module.hasFailedToReturn("i07"), "after the blocker ends and settling succeeds they are home")
-	var _walker = addPawn("i08", "hall_x")
-	thePlayer.location = "hall_x"
-	setTime(23, 20, 9)
-	module.onScheduleTick()
-	check(IS.hasPawn("i08") and module.getAttendance("i08") == "away" and module.hasFailedToReturn("i08"), "a pawn still walking home in front of the player is away until it is gone")
-	IS.deletePawn("i08")
-	thePlayer.location = "main_hall_somewhere"
-
-	# Save and load during the night keep home and away
+	# Record, save and load keep home and away
 	var blockedAgain = addPawn("i05", "far_i05")
 	blockedAgain.currentInteraction = FakeInteraction.new()
 	setTime(23, 30, 9)
+	extender.scheduleBucket = -1
 	module.onScheduleTick()
 	check(module.getAttendance("i05") == "away" and module.getAttendance("i06") == "home", "setup: one away, one home")
 	var presenceBefore = JSON.print(stateRef.cell_presence)
@@ -413,7 +235,7 @@ func _ready():
 	check(JSON.print(nightSaved["extendersData"]["SandboxGameExtender"]["cell_presence"]) == presenceBefore, "attendance is saved")
 	stateRef.clear()
 	GM.GES.loadData(JSON.parse(JSON.print(nightSaved)).result)
-	check(module.getAttendance("i05") == "away" and module.getAttendance("i06") == "home" and JSON.print(SandboxOverhaulModule.getState().cell_presence) == presenceBefore, "after loading mid-night the same people are home and away")
+	check(module.getAttendance("i06") == "home" and JSON.print(SandboxOverhaulModule.getState().cell_presence) == presenceBefore, "after loading mid-night the recorded attendance is the same")
 	blockedAgain.currentInteraction = null
 	IS.deletePawn("i05")
 
@@ -440,7 +262,7 @@ func _ready():
 	var saved = JSON.parse(JSON.print(GM.GES.saveData())).result
 	var savedCells = saved["extendersData"]["SandboxGameExtender"]["cell_assignments"]
 	check(!savedCells.has("i02") and savedCells.has("i03") and savedCells.has("pc"), "a removed character is pruned before saving")
-	check(saved["extendersData"]["SandboxGameExtender"]["schema_version"] == 5 and saved["extendersData"]["SandboxGameExtender"]["known_cells"]["pc"].has("i04"), "saved at schema 5 with the known cells")
+	check(saved["extendersData"]["SandboxGameExtender"]["schema_version"] == 8 and saved["extendersData"]["SandboxGameExtender"]["known_cells"]["pc"].has("i04"), "saved at schema 8 with the known cells")
 	SandboxOverhaulModule.getState().clear()
 	GM.GES.loadData(JSON.parse(JSON.print(saved)).result)
 	check(SandboxOverhaulModule.getCells().getCell("i03")["cell"] == 2 and SandboxOverhaulModule.getCells().getCellmate("pc") == "i01" and SandboxOverhaulModule.getCells().knowsCell("pc", "i04"), "assignments and learned cells survive a load exactly")
@@ -453,7 +275,7 @@ func _ready():
 
 	# An older save without cells loads and creates them on first use
 	SandboxOverhaulModule.getState().loadData({"schema_version": 2, "injuries": {}})
-	check(SandboxOverhaulModule.getState().cell_assignments.empty() and SandboxOverhaulModule.getState().schema_version == 5, "an older save loads with no cells")
+	check(SandboxOverhaulModule.getState().cell_assignments.empty() and SandboxOverhaulModule.getState().schema_version == 8, "an older save loads with no cells")
 	check(module.refreshCells() > 0 and SandboxOverhaulModule.getCells().isAssigned("pc") and SandboxOverhaulModule.getCells().getCell("pc")["cell"] == 1, "and the cells are created on first use, the player first")
 
 	var main2 = load("res://Game/MainScene.gd").new()

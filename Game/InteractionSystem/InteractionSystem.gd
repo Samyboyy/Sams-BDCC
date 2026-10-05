@@ -475,7 +475,10 @@ func deleteAllNonImportantPawns():
 		
 		var involvedPawns = interaction.getInvolvedPawnIDs()
 		stopInteraction(interaction)
+		var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
 		for thePawnID in involvedPawns:
+			if(sandboxModule != null && sandboxModule.keepPawnAcrossDays(thePawnID)):
+				continue # the prison's inmates and staff keep existing from one day to the next
 			deletePawn(thePawnID)
 
 func startInteraction(interactionID:String, involvedPawns:Dictionary, args:Dictionary = {}):
@@ -617,9 +620,12 @@ func trySpawnPawn(specificPawnType = null):
 	if(pawnType == null || !pawnType.shouldSpawnPawns()):
 		return false
 	
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && !sandboxModule.canSpawnPawnType(randomPawnType)):
+		return false # this kind of pawn already fills its share of the pawn limit
+
 	var pickedRandomCharID:String = pawnType.tryPickCharacterID()
 	if(pickedRandomCharID != ""):
-		var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
 		if(sandboxModule != null && !sandboxModule.canSpawnPawn(pickedRandomCharID)):
 			return false # still asleep in their cell
 		spawnPawn(pickedRandomCharID, randomPawnType)
@@ -657,6 +663,9 @@ func spawnMorningWave():
 			trySpawnPawn(charType)
 	
 	#print("THERE ARE NOW "+str(getPawnCount())+" PAWNS")
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && sandboxModule.keepsPrisonersPersistent()):
+		return # the warm-up would walk the prison's persistent inmates and staff away from where their day has them
 	processAllPawnsNoInteractions(60*RNG.randi_range(150,170))
 
 func checkAddNewPawns():

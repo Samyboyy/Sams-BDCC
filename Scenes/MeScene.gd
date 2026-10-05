@@ -114,6 +114,7 @@ func _run():
 			addButton("Cells", "Your cell, your cellmate and the cells you have learned", "cellsMenu")
 			addButton("Work", "Your prison job, today's shift and your record", "workMenu")
 			addButton("Security", "How much attention prison security is paying to you", "securityMenu")
+			addButton("Gangs", "Gangs, your standing with them and your own gang", "gangsMenu")
 		if(!GM.main.isInDungeon()):
 			addButton("Look for trouble", "Try to find an encounter", "lookfortrouble")
 		if(!getFlag("Game_PickedStartingPerks", false)):
@@ -232,8 +233,7 @@ func _run():
 		var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
 		if(sandboxModule != null):
 			sayn("[b]Combat[/b]")
-			sayn(sandboxModule.getReputationText())
-			sayn("")
+			var _bars:Array = sandboxModule.addReputationBars()
 
 		addButton("Back", "Go back to the previous menu", "")
 
@@ -248,6 +248,10 @@ func _react(_action: String, _args):
 		endScene()
 		return
 	
+	if(_action == "gangsMenu"):
+		runScene("GangScene")
+		return
+
 	if(_action == "lookfortrouble"):
 		if(GM.ES.triggerReact(Trigger.PCLookingForTrouble)):
 			endScene()

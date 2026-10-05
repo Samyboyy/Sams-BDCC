@@ -12,6 +12,9 @@ func start(_pawns:Dictionary, _args:Dictionary):
 	if(_args.has("askCredits")):
 		askCredits = _args["askCredits"]
 	setState("", "reacter")
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null):
+		sandboxModule.onNpcFightStarted(self) # a friend, an owner or a gang member may ask the player for help (Sandbox overhaul, see CORE_PATCHES.md)
 
 func init_text():
 	saynn("{starter.You} {starter.youVerb('attack')} {reacter.you}!")
@@ -24,8 +27,24 @@ func init_text():
 # Sandbox overhaul: the player voluntarily surrendered before any fight (see CORE_PATCHES.md).
 func sandboxPlayerSurrender(surrenderingRole:String, otherRole:String):
 	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
-	if(sandboxModule != null && getRolePawn(surrenderingRole).isPlayer() && !getRolePawn(otherRole).isPlayer()):
+	if(sandboxModule == null):
+		return
+	if(getRolePawn(surrenderingRole).isPlayer() && !getRolePawn(otherRole).isPlayer()):
 		sandboxModule.onPlayerSurrender(self, getRoleID(otherRole))
+	elif(!getRolePawn(surrenderingRole).isPlayer() && getRolePawn(otherRole).isPlayer()):
+		sandboxModule.onNpcSurrender(getRoleID(surrenderingRole)) # an NPC the player attacked gave up before any fight
+
+# Sandbox overhaul (see CORE_PATCHES.md): when two other people fight, the player can take a side or try to break it up, not only watch.
+func getInterruptActions(_pawn:CharacterPawn) -> Array:
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null):
+		return sandboxModule.getFightInterruptActions(self, _pawn)
+	return []
+
+func doInterruptAction(_pawn:CharacterPawn, _id:String, _args:Dictionary, _context:Dictionary):
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null):
+		sandboxModule.doFightInterruptAction(self, _pawn, _id)
 
 func init_do(_id:String, _args:Dictionary, _context:Dictionary):
 	if(_id == "fight"):

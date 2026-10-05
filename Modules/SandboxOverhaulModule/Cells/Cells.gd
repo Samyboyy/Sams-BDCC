@@ -3,8 +3,8 @@ class_name Cells
 
 # Inmate cells, cellmates and the nightly schedule. No game access here, so it can be tested on its own.
 #
-# BDCC's cell blocks are three colour-coded areas (orange, red, lilac) with one personal cell room each; there are no separate rooms for
-# other inmates, so a cell is a logical home: block + number, two occupants at most. The player's cell is the block's existing player-cell room.
+# BDCC's cell blocks are three colour-coded areas (orange, red, lilac). A cell is block + number, two occupants at most; cell 1 of each block is the existing player-cell room and every
+# other cell is a real room on the map (see Prison/CellLayout.gd and CellRooms.gd), so a cell is somewhere the player can walk into and meet whoever is asleep there.
 #
 # SandboxState.cell_assignments[characterID] = {"block": "orange"|"red"|"lilac", "cell": int >= 1}
 # SandboxState.known_cells[observerID][targetID] = true   (the observer has learned where the target lives)
@@ -46,10 +46,18 @@ static func cellLabel(block, cell) -> String:
 static func coloredCellLabel(block, cell) -> String:
 	return "[color=" + COLOR_CELL + "]" + cellLabel(block, cell) + "[/color]"
 
+# String.hash gives neighbouring numbers for names that differ in their last character ("dynamicnpc12" and "dynamicnpc13"), which would send every inmate to bed within
+# seconds of each other, so the hash is scrambled (a 32-bit integer finalizer) before it is used for anything that has to look random.
+static func mix(hashValue:int) -> int:
+	var x:int = hashValue & 0xFFFFFFFF
+	x = (((x >> 16) ^ x) * 0x45d9f3b) & 0xFFFFFFFF
+	x = (((x >> 16) ^ x) * 0x45d9f3b) & 0xFFFFFFFF
+	return (x >> 16) ^ x
+
 # Stable per-character offset in seconds, -30 to +30 minutes. The salt gives bedtime and wake time different offsets.
 static func offsetSeconds(characterID, salt:String) -> int:
 	var span:int = OFFSET_MINUTES * 60 * 2 + 1
-	return posmod((salt + str(characterID)).hash(), span) - OFFSET_MINUTES * 60
+	return posmod(mix((salt + str(characterID)).hash()), span) - OFFSET_MINUTES * 60
 
 static func bedtimeSeconds(characterID) -> int:
 	return BEDTIME_HOUR * 3600 + offsetSeconds(characterID, "bed")

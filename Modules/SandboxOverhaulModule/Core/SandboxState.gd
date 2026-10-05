@@ -7,12 +7,19 @@ const AxisScript = preload("res://Modules/SandboxOverhaulModule/Relationships/Fe
 # 2 -> 3: cell_assignments got its real structure and known_cells and cell_presence were added (older saves have none; cells are created on first use).
 # 3 -> 4: work (jobs, shift and attendance), upgrades and hidden_storage were added (older saves are unemployed with no upgrades).
 # 4 -> 5: security (Security Attention, warnings, search cooldowns) was added (older saves start at attention 0 with no cooldowns).
-const CURRENT_SCHEMA_VERSION = 5
+# 5 -> 6: gangs (membership, relations, captives, assignment) was added (older saves have no gangs; the established ones are created on first use).
+# 6 -> 7: npc_jobs (the other inmates' jobs) and workplace (events, rivals) were added (older saves have none; jobs are handed out on first use).
+# 7 -> 8: routines (today's plan of each inmate) and presence (where each inmate is and what they are doing) were added (older saves start from where the pawns stand).
+const CURRENT_SCHEMA_VERSION = 8
 const InjuriesScript = preload("res://Modules/SandboxOverhaulModule/Injuries/Injuries.gd")
 const CellsScript = preload("res://Modules/SandboxOverhaulModule/Cells/Cells.gd")
 const EmploymentScript = preload("res://Modules/SandboxOverhaulModule/Work/Employment.gd")
 const UpgradesScript = preload("res://Modules/SandboxOverhaulModule/Cells/CellUpgrades.gd")
 const SecurityScript = preload("res://Modules/SandboxOverhaulModule/Security/Security.gd")
+const GangsScript = preload("res://Modules/SandboxOverhaulModule/Gangs/Gangs.gd")
+const NpcJobsScript = preload("res://Modules/SandboxOverhaulModule/Work/NpcJobs.gd")
+const PresenceScript = preload("res://Modules/SandboxOverhaulModule/Prison/PresenceState.gd")
+const WorkEventsScript = preload("res://Modules/SandboxOverhaulModule/Work/WorkEvents.gd")
 
 var schema_version: int = CURRENT_SCHEMA_VERSION
 var npc_profiles: Dictionary = {}
@@ -39,6 +46,15 @@ var upgrades: Dictionary = UpgradesScript.defaults()
 var hidden_storage: Array = []
 # Security Attention, warnings and every enforcement cooldown. See GuardSecurity.
 var security: Dictionary = SecurityScript.defaults()
+# Gangs, relations, personal gang relations, captives, the player's assignment. See GangService.
+var gangs: Dictionary = GangsScript.defaults()
+# Jobs of the other inmates and what the player has learned of them. See NpcJobs.
+var npc_jobs: Dictionary = NpcJobsScript.defaults()
+# Workplace events: cooldowns, rivals and the open event. See WorkEvents.
+var workplace: Dictionary = WorkEventsScript.defaults()
+# Today's plan of each inmate and where each inmate is. See PresenceState.
+var routines: Dictionary = PresenceScript.defaultRoutines()
+var presence: Dictionary = {}
 
 const DICT_FIELDS = ["npc_profiles", "directed_relationships", "major_memories", "knowledge", "gang_state", "cooldowns"]
 
@@ -56,6 +72,11 @@ func clear():
 	upgrades = UpgradesScript.defaults()
 	hidden_storage = []
 	security = SecurityScript.defaults()
+	gangs = GangsScript.defaults()
+	npc_jobs = NpcJobsScript.defaults()
+	workplace = WorkEventsScript.defaults()
+	routines = PresenceScript.defaultRoutines()
+	presence = {}
 
 # Safe getters: missing entries return defaults, never null.
 func getNpcProfile(charID: String) -> Dictionary:
@@ -81,7 +102,7 @@ func getCooldown(key: String, default = 0):
 
 func saveData() -> Dictionary:
 	var data = {"schema_version": schema_version, "obligations": obligations.duplicate(true), "reputation": reputation.duplicate(true), "injuries": injuries.duplicate(true), "cell_assignments": cell_assignments.duplicate(true), "known_cells": known_cells.duplicate(true), "cell_presence": cell_presence.duplicate(true),
-		"work": work.duplicate(true), "upgrades": upgrades.duplicate(true), "hidden_storage": hidden_storage.duplicate(true), "security": security.duplicate(true)}
+		"work": work.duplicate(true), "upgrades": upgrades.duplicate(true), "hidden_storage": hidden_storage.duplicate(true), "security": security.duplicate(true), "gangs": gangs.duplicate(true), "npc_jobs": npc_jobs.duplicate(true), "workplace": workplace.duplicate(true), "routines": routines.duplicate(true), "presence": presence.duplicate(true)}
 	for field in DICT_FIELDS:
 		data[field] = get(field).duplicate(true)
 	return data
@@ -113,6 +134,14 @@ func loadData(data) -> void:
 		hidden_storage = UpgradesScript.sanitizeRecords(data.get("hidden_storage"), UpgradesScript.HIDDEN_SLOTS)
 	if(schema_version >= 5):
 		security = SecurityScript.sanitize(data.get("security"))
+	if(schema_version >= 6):
+		gangs = GangsScript.sanitize(data.get("gangs"))
+	if(schema_version >= 7):
+		npc_jobs = NpcJobsScript.sanitize(data.get("npc_jobs"))
+		workplace = WorkEventsScript.sanitize(data.get("workplace"))
+	if(schema_version >= 8):
+		routines = PresenceScript.sanitizeRoutines(data.get("routines"))
+		presence = PresenceScript.sanitizePresence(data.get("presence"))
 	var loadedObligations = data.get("obligations")
 	if(loadedObligations is Array):
 		obligations = loadedObligations.duplicate(true)
@@ -272,3 +301,17 @@ func migrate() -> void:
 		# 4 -> 5: a version-4 save has no security state: attention 0 and no cooldowns.
 		security = SecurityScript.defaults()
 		schema_version = 5
+	if(schema_version == 5):
+		# 5 -> 6: a version-5 save has no gangs: the established ones are created on first use.
+		gangs = GangsScript.defaults()
+		schema_version = 6
+	if(schema_version == 6):
+		# 6 -> 7: a version-6 save has no NPC jobs or workplace events: jobs are handed out on first use.
+		npc_jobs = NpcJobsScript.defaults()
+		workplace = WorkEventsScript.defaults()
+		schema_version = 7
+	if(schema_version == 7):
+		# 7 -> 8: a version-7 save has no routines or presence: today's plans are made from the characters when the game next runs the prison.
+		routines = PresenceScript.defaultRoutines()
+		presence = {}
+		schema_version = 8
