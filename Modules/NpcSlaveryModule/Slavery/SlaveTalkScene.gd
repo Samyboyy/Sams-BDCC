@@ -36,6 +36,13 @@ func _run():
 			addButton("Back", "Enough interactions", "endthescene")
 			return
 		npcSlavery.checklevelUp()
+
+		var sandboxStatus = GlobalRegistry.getModule("SandboxOverhaulModule")
+		if(sandboxStatus != null && GM.main.IS.hasPawn(npc.getID()) && !sandboxStatus.isSlaveWithPlayer(npc.getID())):
+			playAnimation(StageScene.Solo, "stand") # commands are given in person: this shows where they are and what they are doing, nothing more
+			saynn(sandboxStatus.getSlaveStatusText(npc.getID()))
+			addButtonAt(14, "Back", "Enough interactions", "endthescene")
+			return
 		
 		if(npcSlavery.isDoingActivity()):
 			var activity:SlaveActivityBase = npcSlavery.getActivity()
@@ -53,7 +60,7 @@ func _run():
 				
 				addActivityButtons()
 				return
-		elif(GM.main.IS.hasPawn(npc.getID())):
+		elif(GM.main.IS.hasPawn(npc.getID()) && !(GlobalRegistry.getModule("SandboxOverhaulModule") != null && GlobalRegistry.getModule("SandboxOverhaulModule").isSlaveWithPlayer(npc.getID()))): # a slave standing right here can be talked to (slaves now live in the prison)
 			playAnimation(StageScene.Solo, "stand")
 			
 			saynn("{npc.name} is wandering around the prison somewhere.. Wait until {npc.he} {npc.verb('return')}.")

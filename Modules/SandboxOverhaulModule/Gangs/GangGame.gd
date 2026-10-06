@@ -348,7 +348,7 @@ static func offerAssignment() -> String:
 	var offer:Dictionary = affairs().makeOffer(ctx, now())
 	if(offer.empty()):
 		return ""
-	return "[color=cyan]" + nameOf(g.getLeader(gid)) + " has a job for you. Talk to them to hear it.[/color]"
+	return "[color=cyan]" + nameOf(g.getLeader(gid)) + " has something they want you to do. Talk to them (Gangs) to hear about the job.[/color]"
 
 static func acceptAssignment() -> String:
 	if(!affairs().accept(now())):
@@ -989,10 +989,56 @@ static func taskView() -> Dictionary:
 	if(!isReady() || !gangs().isInitialized()):
 		return {"visible": false, "title": "", "lines": []}
 	var a:Dictionary = affairs().getAssignment()
+	if(!a.empty() && str(a.get("state", "")) == "offered"):
+		var leaderName:String = nameOf(gangs().getLeader(str(a.get("gang", ""))))
+		return {"visible": true, "title": leaderName + " has a job for you", "lines": [leaderName + " wants to give you a job. Talk to them and open Gangs to hear about it. You can accept or decline."]}
 	if(a.empty() || !["active", "ready"].has(str(a.get("state", "")))):
 		return {"visible": false, "title": "", "lines": []}
 	var ctx:Dictionary = speechContext(a)
 	return {"visible": true, "title": GangDialogue.taskTitle(a, ctx), "lines": GangDialogue.taskLines(a, ctx, now(), ServiceScript.HOUR)}
+
+# Who the accepted gang job points at right now, for the map's yellow Q: [[kind, tooltip text]] where kind is "target" (somebody to beat, free or capture) or "contact" (somebody to take something to, hand somebody to, or report to).
+# Read from the live assignment (nothing is stored), so it follows the objective, disappears when the job is reported, fails or lapses, and is the same thing the Side Tasks entry shows.
+static func taskMarks(characterID) -> Array:
+	var marks:Array = []
+	if(!isReady() || !gangs().isInitialized()):
+		return marks
+	var a:Dictionary = affairs().getAssignment()
+	if(a.empty() || !["offered", "active", "ready"].has(str(a.get("state", "")))):
+		return marks
+	var leader:String = gangs().getLeader(str(a.get("gang", "")))
+	if(str(a["state"]) == "offered"):
+		if(characterID == leader && leader != ""):
+			marks.append(["contact", "Hear about the job from " + nameOf(leader)])
+		return marks
+	var target:String = str(a.get("target", ""))
+	if(str(a["state"]) == "ready"):
+		if(characterID == leader && leader != ""):
+			marks.append(["contact", "Report to " + nameOf(leader)])
+		return marks
+	match(str(a.get("type", ""))):
+		"defeat":
+			if(characterID == target && target != ""):
+				marks.append(["target", "Defeat " + nameOf(target)])
+		"capture":
+			if(str(a.get("stage", "")) == "defeated"):
+				if(characterID == leader && leader != ""):
+					marks.append(["contact", "Hand " + nameOf(target) + " over to " + nameOf(leader)])
+			elif(characterID == target && target != ""):
+				marks.append(["target", "Beat " + nameOf(target) + " and hand them over"])
+		"courier":
+			if(characterID == target && target != ""):
+				marks.append(["contact", "Deliver to " + nameOf(target)])
+		"deliver":
+			if(characterID == leader && leader != ""):
+				marks.append(["contact", "Deliver to " + nameOf(leader)])
+		"rescue":
+			if(characterID == target && target != ""):
+				marks.append(["target", "Free " + nameOf(target)])
+			var rival:String = str(a.get("rival", ""))
+			if(characterID == rival && rival != ""):
+				marks.append(["target", "Beat " + nameOf(rival) + " to free " + nameOf(target)])
+	return marks
 
 # The archived entry for the latest job reported back: {"visible", "title", "lines"}.
 static func taskDoneView() -> Dictionary:

@@ -16,9 +16,12 @@ const SATISFIED_MIN = 0.5
 const GOOD = {"affection": 5.0, "trust": 4.0, "desire": 8.0}
 # Consensual, poor experience. Scaled by 1.0..1.5 the worse it was.
 const POOR = {"affection": -3.0, "trust": -1.0, "desire": -5.0}
-# Not scaled by satisfaction. Desire is never raised automatically.
+# Not scaled by satisfaction. The victim's Desire is never raised.
 const COERCED_POINTS = {"affection": -10.0, "trust": -15.0, "fear": 8.0}
 const FORCED_POINTS = {"affection": -25.0, "trust": -35.0, "fear": 20.0}
+
+# The aggressor (the one who coerced or forced) successfully pursued what they wanted: their Desire for the victim rises a little. Never the victim's.
+const AGGRESSOR_DESIRE = {ConsentScript.COERCED: 3.0, ConsentScript.FORCED: 5.0}
 
 # Change to the legacy BDCC affection (-1..1 scale) of the victim towards the aggressor.
 const LEGACY_AFFECTION = {ConsentScript.COERCED: -0.1, ConsentScript.FORCED: -0.25}
@@ -56,9 +59,16 @@ static func getEffects(consent:int, domSatisfaction:float, subSatisfaction:float
 		return result
 	return {}
 
+# The aggressor's own change after a non-consensual encounter: {"desire": +3 (coerced) or +5 (forced)}. Empty for consensual ones.
+static func getAggressorEffects(consent:int) -> Dictionary:
+	if(AGGRESSOR_DESIRE.has(consent)):
+		return {"desire": AGGRESSOR_DESIRE[consent]}
+	return {}
+
 # Applies the encounter to the directed relationships. Returns [{observer, target, changes}] with the
 # changes actually applied (after clamping), skipping zero changes.
-# Consensual: each NPC participant towards their partner. Non-consensual: the NPC sub towards the dom.
+# Consensual: each NPC participant towards their partner (Desire rises with a satisfying encounter, falls with a poor one, whoever is dom or sub, towards the player or another NPC).
+# Non-consensual: the NPC victim (sub) towards the dom gets the negative points and never more Desire; the NPC aggressor (dom) towards the victim (the player or another NPC) gets a small Desire gain.
 # The player's own feelings are never stored.
 static func apply(relationships, consent:int, domID:String, subID:String, domSatisfaction:float, subSatisfaction:float) -> Array:
 	var effects:Dictionary = getEffects(consent, domSatisfaction, subSatisfaction)
@@ -81,6 +91,14 @@ static func apply(relationships, consent:int, domID:String, subID:String, domSat
 			if(applied != 0.0):
 				changes[axis] = applied
 		results.append({observer = pair[0], target = pair[1], changes = changes})
+	if(consent != ConsentScript.CONSENSUAL && domID != "pc"):
+		var gain:Dictionary = getAggressorEffects(consent)
+		var gained:Dictionary = {}
+		for axis in gain:
+			var applied:float = relationships.adjustFeeling(domID, subID, axis, gain[axis])
+			if(applied != 0.0):
+				gained[axis] = applied
+		results.append({observer = domID, target = subID, changes = gained})
 	return results
 
 static func colorForChange(axis:String, amount:float) -> String:

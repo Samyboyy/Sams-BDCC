@@ -12,6 +12,12 @@ func _init():
 	sceneID = "NpcOwnerEventRunnerScene"
 
 func _run():
+	if(state == "" && runner.eventStack.empty()):
+		var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+		if(sandboxModule != null):
+			saynn(sandboxModule.getOwnerStartedText(runner.getOwnerID())) # the owner is not standing here (their event waits until they walk over): say so, and always offer a way on
+			addButton("Continue", "Carry on", "endthescene")
+			return
 	if(state == ""):
 		runner.run()
 		setCharactersEasyList(runner.getAllInvolvedCharIDs())

@@ -1,6 +1,8 @@
 extends InteractionGoalBase
 
 func getScore(_pawn:CharacterPawn) -> float:
+	if(GlobalRegistry.getModule("SandboxOverhaulModule") != null):
+		return 0.0 # slaves are persistent inmates with a cell of their own: they do not walk to the player's cell and vanish
 	if(_pawn.isSlaveToPlayer()):
 		var npcSlave:NpcSlave = _pawn.getNpcSlavery()
 		var activity = npcSlave.getActivity()

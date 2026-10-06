@@ -105,6 +105,72 @@ static func requestText(module, askerID:String, foeID:String, bond:String) -> St
 			return asker + ", your friend, is fighting " + foe + " and catches your eye. [say=" + askerID + "]Please. I could use some help.[/say]"
 	return asker + " is fighting " + foe + " and calls out to you. [say=" + askerID + "]You! Give me a hand!?[/say]"
 
+# The fight the player joined for somebody is decided (the player won, lost or the foe gave up): the one shared, exactly-once thank-you. Returns whether anything was said.
+# Winning: owner Trust +4, Respect +4, Affection +1 (and a minor warning forgiven, or the next demand a day later); friend Trust +3, Affection +2, Respect +1; gangmate their Trust +2, Respect +2 and gang standing +2;
+# gang leader Trust +2, Respect +3 and standing +3; anybody else who asked Trust +1, Respect +1. Losing after trying: Trust +1. One full reward per person per day, and one per incident.
+static func acknowledge(module, foeID, playerWon:bool) -> bool:
+	if(module == null || !(foeID is String)):
+		return false
+	var key:String = "helpinc:" + str(foeID)
+	var incident:Dictionary = module.getState().cooldowns.get(key, {})
+	if(incident.empty()):
+		return false
+	var _gone:bool = module.getState().cooldowns.erase(key) # once per incident: reopening a scene or reporting twice finds nothing
+	if(module.getHelpClock() - int(incident.get("stamp", 0)) > 2 * 3600):
+		return false # an old one: the fight it belonged to is long over
+	var askerID:String = str(incident.get("asker", ""))
+	var bond:String = str(incident.get("bond", ""))
+	if(askerID == "" || GM.main.getCharacter(askerID) == null):
+		return false
+	var rel = module.getRelationships()
+	var gangs = module.getGangs()
+	var day:int = GM.main.getDays()
+	var rewardKey:String = "helpreward:" + askerID
+	var full:bool = playerWon && int(module.getState().cooldowns.get(rewardKey, -100)) != day
+	var asker:String = module.characterName(askerID)
+	if(!playerWon):
+		var _small:float = rel.adjustFeeling(askerID, "pc", "trust", 1.0)
+		GM.main.addMessage(asker + ": \"You tried. That counts.\"")
+		return true
+	if(!full):
+		GM.main.addMessage(asker + " nods at you. Helping again today earns no more than that.")
+		return true
+	module.getState().cooldowns[rewardKey] = day
+	var line:String = "Thanks."
+	var theirs:String = gangs.gangOf(askerID)
+	match(bond):
+		"owner":
+			var _a:float = rel.adjustFeeling(askerID, "pc", "trust", 4.0)
+			var _b:float = rel.adjustFeeling(askerID, "pc", "respect", 4.0)
+			var _c:float = rel.adjustFeeling(askerID, "pc", "affection", 1.0)
+			var ownership = module.getOwnership()
+			var _eased:String = ownership.showGratitude(module.getHelpClock(), day)
+			match(ownership.style()):
+				"harsh":
+					line = "Not bad. Remember who you did that for."
+				"controlling":
+					line = "Good. That is what I keep you for."
+				_:
+					line = "Thank you. I will not forget that."
+		"friend":
+			var _d:float = rel.adjustFeeling(askerID, "pc", "trust", 3.0)
+			var _e:float = rel.adjustFeeling(askerID, "pc", "affection", 2.0)
+			var _f:float = rel.adjustFeeling(askerID, "pc", "respect", 1.0)
+			line = "Thanks. I owe you."
+		"gangmate", "leader":
+			var leader:bool = bond == "leader"
+			var _g:float = rel.adjustFeeling(askerID, "pc", "trust", 2.0)
+			var _h:float = rel.adjustFeeling(askerID, "pc", "respect", 3.0 if leader else 2.0)
+			if(theirs != "" && theirs == gangs.playerGang()):
+				var _s:int = gangs.addPersonal("pc", theirs, 3.0 if leader else 2.0)
+			line = "Thanks. The gang will hear about it."
+		_:
+			var _i:float = rel.adjustFeeling(askerID, "pc", "trust", 1.0)
+			var _j:float = rel.adjustFeeling(askerID, "pc", "respect", 1.0)
+			line = "Thanks. I mean it."
+	GM.main.addMessage(asker + ": \"" + line + "\"")
+	return true
+
 # Applies the player's answer once. choice: "help", "breakup" or "refuse". delivered: the request was actually shown to the player; without that nothing at all changes.
 # Returns the text to show.
 static func resolve(module, askerID:String, foeID:String, bond:String, choice:String, delivered:bool) -> String:
@@ -122,13 +188,9 @@ static func resolve(module, askerID:String, foeID:String, bond:String, choice:St
 	var asker:String = module.characterName(askerID)
 	if(choice == "help"):
 		var role:String = "starter" if fight.getRoleID("starter") == askerID else "reacter"
+		module.getState().cooldowns["helpinc:" + foeID] = {"asker": askerID, "bond": bond, "stamp": module.getHelpClock()} # the thanks come when the fight is decided (see acknowledge)
 		module.doFightInterruptAction(fight, pcPawn, "join_" + role)
-		var _r:float = rel.adjustFeeling(askerID, "pc", "respect", 5.0)
-		if(theirs != "" && theirs == gangs.playerGang()):
-			var _s:int = gangs.addPersonal("pc", theirs, 3.0 if bond != "leader" else 4.0)
-			if(bond == "leader"):
-				var _t:float = rel.adjustFeeling(askerID, "pc", "trust", 4.0)
-		return "You throw yourself in beside " + asker + ". They will not forget it."
+		return "You throw yourself in beside " + asker + "."
 	if(choice == "breakup"):
 		module.doFightInterruptAction(fight, pcPawn, "break_up")
 		if(fight.wasDeleted):

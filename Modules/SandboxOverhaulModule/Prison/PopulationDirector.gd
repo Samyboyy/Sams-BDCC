@@ -289,6 +289,8 @@ static func run(module, memory:Dictionary, summary:Dictionary, pcLoc:String, now
 		for gid in info["byGang"]:
 			duty.append(info["byGang"][gid]["leader"])
 			duty.append(info["byGang"][gid]["anchor"])
+		for slaveID in module.getOwnership().slaveIDs():
+			duty.append(slaveID) # the player's slaves have no inmate job (they have a role instead, see Ownership/)
 		var _given:int = module.getNpcJobs().ensure(ids, day, duty)
 	var clock:int = clockOf(day, now)
 	var elapsed:int = clock - int(memory.get("clock", clock))
@@ -321,6 +323,10 @@ static func run(module, memory:Dictionary, summary:Dictionary, pcLoc:String, now
 		if(crewState != "" && EmploymentScript.isValidJob(str(facts["job"]))):
 			kind = crewState
 			room = str(EmploymentScript.JOBS[facts["job"]]["room"])
+		var wanted:Dictionary = module.getRoutineOverride(characterID, day, RoutineScript.axis(now)) # the owner at their cell for a check-in; a slave at their post, report or escape
+		if(!wanted.empty()):
+			kind = str(wanted["kind"])
+			room = str(wanted["room"])
 		# A worker who cannot work today, or a place that does not exist on this map, is replaced by somewhere sensible, the same way every time
 		if(kind == "work" && !bool(facts["available"])):
 			kind = "hall"

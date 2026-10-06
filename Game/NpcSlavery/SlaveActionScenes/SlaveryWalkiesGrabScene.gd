@@ -33,8 +33,9 @@ func _run():
 		addButton("Cancel", "Never mind", "endthescene")
 		
 	if(state == "do_wander"):
-		GM.pc.setLocation("hall_mainentrance")
-		aimCameraAndSetLocName("hall_mainentrance")
+		if(GlobalRegistry.getModule("SandboxOverhaulModule") == null):
+			GM.pc.setLocation("hall_mainentrance") # (with the module the walk starts where you and your slave already stand)
+		aimCameraAndSetLocName(GM.pc.getLocation())
 		playAnimation(StageScene.Duo, "stand", {npc=npcID, npcBodyState={leashedBy="pc"}})
 		
 		saynn("You leash your slave and bring {npc.him} out into the main hall.")
@@ -42,8 +43,9 @@ func _run():
 		addButton("Continue", "See what happens next", "start_wander", [""])
 	
 	if(state == "do_petwander"):
-		GM.pc.setLocation("hall_mainentrance")
-		aimCameraAndSetLocName("hall_mainentrance")
+		if(GlobalRegistry.getModule("SandboxOverhaulModule") == null):
+			GM.pc.setLocation("hall_mainentrance")
+		aimCameraAndSetLocName(GM.pc.getLocation())
 		#playAnimation(StageScene.PuppyDuo, "walk", {npc=npcID, npcAction="walk", flipNPC=true, npcBodyState={naked=true, leashedBy="pc"}})
 		playAnimation(StageScene.PuppyDuo, "stand", {npc=npcID, flipNPC=true, npcBodyState={naked=true, leashedBy="pc"}})
 

@@ -12,6 +12,7 @@ const EmploymentScript = preload("res://Modules/SandboxOverhaulModule/Work/Emplo
 const UpgradesScript = preload("res://Modules/SandboxOverhaulModule/Cells/CellUpgrades.gd")
 const SecurityScript = preload("res://Modules/SandboxOverhaulModule/Security/Security.gd")
 const NpcJobsScript = preload("res://Modules/SandboxOverhaulModule/Work/NpcJobs.gd")
+const OwnershipScript = preload("res://Modules/SandboxOverhaulModule/Ownership/Ownership.gd")
 const GangsScript = preload("res://Modules/SandboxOverhaulModule/Gangs/Gangs.gd")
 const AffairsScript = preload("res://Modules/SandboxOverhaulModule/Gangs/GangAffairs.gd")
 const CombatScript = preload("res://Modules/SandboxOverhaulModule/Relationships/CombatConsequences.gd")
@@ -27,6 +28,12 @@ var security
 var gangs
 var affairs
 var npcJobs
+var ownership
+var yieldKeys:Dictionary = {} # target id -> the encounter that last counted as the player beating them (not saved)
+var startingVoluntary:bool = false # true while the player's own "Ask for protection" starts the relationship (not saved)
+var enslaveRoute:Dictionary = {} # character id -> how the player is enslaving them right now (not saved; read once)
+var approachRetry:Dictionary = {} # owner id -> the clock before which a postponed visit is not tried again (not saved)
+var ownershipBucket:int = -1 # last five-minute bucket the ownership check ran in (not saved, so it runs again after a load)
 var director:Dictionary = {} # the population director's memory (not saved; reset with every game)
 var gangBucket:int = -1 # last ten-minute bucket the gang check ran in (not saved)
 var securityBucket:int = -1 # last ten-minute bucket the guard check ran in (not saved)
@@ -45,6 +52,7 @@ func _init():
 	gangs = GangsScript.new(state)
 	affairs = AffairsScript.new(state, gangs)
 	npcJobs = NpcJobsScript.new(state)
+	ownership = OwnershipScript.new(state)
 
 func register(_GES: GameExtenderSystem):
 	_GES.register(self, ExtendGame.saveLoadData)
@@ -60,6 +68,7 @@ func pcProcessTime(_pc, _seconds):
 		theModule.onSecurityTick()
 		theModule.onGangTick()
 		theModule.onPopulationTick()
+		theModule.onOwnershipTick()
 
 # Injuries heal with the player's hour counter, which runs on every time skip, so every character's injuries are processed here
 # (the NPC hour hook only reaches characters that are currently being simulated).
@@ -121,6 +130,11 @@ func getGangs():
 func getGangAffairs():
 	var _state = getState()
 	return affairs
+
+# Ownership service, same lifetime rules as getRelationships.
+func getOwnership():
+	var _state = getState()
+	return ownership
 
 # NPC jobs service, same lifetime rules as getRelationships.
 func getNpcJobs():

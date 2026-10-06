@@ -235,3 +235,74 @@ Almost everything is module-only (`WorldEdits/PopulationBootstrapWorldEdit.gd`, 
 - **`project.godot`:** class registrations for `GangDialogue` and the two quest classes.
 
 Not changed: `World.gd` (the unreachable-cell bug was in the module's door flags, see the Relationships README), `MainScene.gd` (the load-time bootstrap is a world edit, which the game already applies when a game starts or loads).
+
+
+### 14. Meaningful Ownership and Slavery (Milestone 8)
+
+The rules, the owner event, the slave actions, the ownership screen and the journal entries are all module-only (`Ownership/`, `Scenes/OwnershipScene.gd`, `Quests/Owner*.gd`, `Quests/SlaveAttentionQuest.gd`). The module registers one
+owner event (`SandboxOwnerOps`) with `GlobalRegistry.registerNpcOwnerEvent` and fourteen slave actions with `registerSlaveAction`, both from `postInit` (the module lists for them are not read by the registry). It follows BDCC's own
+`SoftSlavery` and NPC slavery instead of replacing them. Base-game edits, all no-ops without `SandboxOverhaulModule`:
+
+- **`Game/PlayerSlaverySoft/NpcOwnerBase.gd`:** `shouldOwnerApproachPC()` and `getApproachEvent()` also answer for the module's own pending business (a warning or a demand to deliver), so BDCC's existing `NpcOwnerApproach` goal
+  walks the owner to the player and runs the module's event; `getTalkActions()` adds the module's entries (Report in, Hear their demand, Hand it over, Ownership terms) and drops "Ask freedom" (its price was 500 to 2000 credits);
+  `doTalkAction()` hands the module's entries to it; `calcFreedomPrice()` returns the module's buyout price (30 to 60 credits) when the module is there. A module-only solution is not possible: these are the owner's own extension points.
+- **`Game/InteractionSystem/Interactions/Talking.gd`:** "Ask for protection" (only where it makes sense; it opens the module's scene, which shows the terms and asks twice) and "Slave" (opens BDCC's own slave menu for your slave).
+- **`Scenes/MeScene.gd`:** an "Ownership" button next to "Gangs" (the module's overview).
+- **`Modules/NpcSlaveryModule/Slavery/SlaveTalkScene.gd`:** a slave who is standing in the same room can be talked to. Slaves used to leave the world and live in an abstract pool, so any slave with a pawn was "wandering the prison, wait until they return".
+  Now they are ordinary inmates in their own cells, and the slave menu opens whenever they are standing in front of the player.
+- **`Game/NpcSlavery/SlaveEvents/SlaveEscapes.gd`:** `canHappen()` is false when the module is there. That event freed a slave on a silent random roll (and again when the day's event was skipped). The module runs escapes instead and always
+  warns, shows and lets the player answer first.
+- **`project.godot`:** class registrations for the three new quest classes.
+
+Behaviour of existing module code that changed on purpose: the player's owner and the player's slaves are no longer "kept elsewhere" (`Module.isKeptElsewhere`, `isPawnBlocked`): they live in their cells, are directed like any other inmate
+and are counted home or away by where they stand. `Module.getBlockedReason` no longer says "owned by ..." (an owned player can work and be searched like anyone else; the owner's obligations are the module's own). Tests for these were updated.
+
+**Correction pass (continuity, no teleporting, economy).** More base-game edits, all no-ops without `SandboxOverhaulModule`:
+
+- **`Modules/NpcSlaveryModule/Module.gd` (`doEnslaveCharacter`):** with the module the pawn is no longer deleted. Only interactions with other characters end (`endEnslavingInteractions`); the pawn keeps its room, cell and routine, and `onSlaveEnslaved` picks the new slave up.
+- **`Game/InteractionSystem/AloneGoals/GoalSlaveLeave.gd`:** score 0 with the module. That goal walked an idle slave to the player's cell and deleted the pawn.
+- **`Game/NpcSlavery/SlaveActivities/Prostitution.gd`, `StuckInStocks.gd`, `StuckInSlutwall.gd`:** no `setLocation` of the slave with the module (the pawn stays where it stands).
+- **`SlaveActionScenes/PunishSlaveryLeaveInStocks.gd`, `PunishSlaveryLeaveInSlutwall.gd`:** the slave standing with the player is taken along to the spot (`slaveFollowsPlayer`, never moves a slave from another room).
+- **`SlaveryWalkiesGrabScene.gd`, `SlaveryWalkiesScene.gd`:** walkies start where the player stands, and the slave on the leash is in each room the player walks into (`slaveWalksWithPlayer`).
+- **`Modules/NpcSlaveryModule/Slavery/SlaveTalkScene.gd`:** a slave with a pawn who is not in the player's room only gets a status text (where, doing what), no commands.
+
+**Owner visits never teleport.** More base-game edits, all no-ops without `SandboxOverhaulModule`:
+
+- **`Game/PlayerSlaverySoft/NpcOwnerEventBase.gd` (`involveCharID`):** the owner is never created at, or moved to, the player's location. Other event participants (and scripted moves where the event carries the player and everyone in it together, such as walkies or a parade) are untouched.
+- **`Game/PlayerSlaverySoft/NpcOwnerEventRunner.gd` (`runEvent`):** a first event only starts when the owner physically stands with the player. If the pawn is missing it is restored by the population system (its saved place, else its routine) and the event waits.
+- **`Game/InteractionSystem/AloneGoals/GoalNpcOwnerApproach.gd`:** the existing approach goal scores 0 (and ends) while the owner is held, badly hurt, busy (this includes being knocked out) or cut off, with a half-hour delay before it is weighed again.
+- **`Game/InteractionSystem/InteractionSystem.gd` (`trySpawnSpecialRelationshipPawn`):** does nothing with the module; it respawned (deleted and re-created) an owner who wanted to approach.
+
+**Manual-playtest correction (soft-lock, onboarding, arrangements, badge).** More base-game edits, all no-ops without `SandboxOverhaulModule`:
+
+- **`Scenes/NpcOwnerEventRunnerScene.gd`:** when the runner has no event (the owner is not standing with the player, so their event waits) the scene shows who they are and the terms, with one Continue button. Before, the scene had no buttons at all
+  (the soft-lock: "Oscar became your Owner!" then a blank action grid, after a console or debug conversion started the owner's intro with the owner elsewhere).
+- **`Game/InteractionSystem/Interactions/Talking.gd`:** (1) a talk that is open with somebody who has just become the player's owner shows who they are and exactly one action, Continue, which ends the talk; (2) "Give instructions" for the player's own slaves,
+  outside the "are they in the mood to chat" checks (disabled with the reason only for a real physical blocker); it replaces the old "Slave" action; (3) the "Enslave!" talk option tells the module how the slave was acquired.
+- **`Game/InteractionSystem/Relationship/SpecialRelationships/SoftSlavery.gd` (`onStart`):** tells the module, which records the owner at once, gives a grace period before the first owner visit and shows the terms.
+- **`Modules/NpcSlaveryModule/Module.gd`:** `doEnslaveCharacter` tells the module whether the breaking quest was done (`onSlaveEnslaved(npcID, hadQuest)`), and `doFreeEnslavedCharacter` redraws the map badge.
+- **`Modules/NpcSlaveryModule/Enslaving/KidnapDynamicNpcScene.gd`:** tells the module the slave came through the kidnap scene.
+- **`Game/World/WorldPawn.gd`, `Game/World/World.gd`:** a third map badge, a purple "S", after the relationship tag and the gang badge.
+
+**Coherence pass (one owner, claims, victories, Q badge, population).** More base-game edits, all no-ops without `SandboxOverhaulModule`:
+
+- **`Game/InteractionSystem/Relationship/RelationshipSystem.gd` (`startSpecialRelantionship`):** the one gate for every way of becoming the player's owner (the talk options, the Nemesis ambush, debug and console conversions, the quick-start scene,
+  the module's own protection ask). With the module, a second owner is refused unless the claimant wins the claim (`Module.mayStartOwner`).
+- **`Game/InteractionSystem/Interactions/Talking.gd`:** "Offer to enslave" and "Ask to become slave", when the player already has an owner, open `OwnershipDisputeScene` instead of starting a second relationship.
+- **`Game/InteractionSystem/Interactions/GenericAttack.gd`:** an NPC's surrender before a fight reports through the shared victory helper with the interaction as its source.
+- **`Characters/Dynamic/NpcFinder.gd` (`generateNpcForPool`):** when the prison is full (inmates at the hard cap, staff at their limits) an event that asks for a new character gets one who already exists. Nothing is deleted.
+- **`Game/World/WorldPawn.gd`, `Game/World/World.gd`:** a fourth map badge, a yellow "Q", for the person a tracked module task points at (after the relationship tag, the gang badge and the "S").
+- **`Game/InteractionSystem/Relationship/SpecialRelationships/SoftSlavery.gd` (`onEnd`):** does not fail when the owner character no longer exists (a deleted character used to raise an error when their ownership was ended).
+
+
+### 15. Ownership coherence pass (reports, protection, meetings, nights, rescue)
+
+All no-ops without `SandboxOverhaulModule`:
+
+- **`Game/PlayerSlaverySoft/Events/Util/ApproachOrTalk.gd`:** when the player has a finished owner demand, talking to the owner opens the Talk menu first (where "Report completed demand" is) instead of running the owner's own approach event. Root cause of "the report never worked": an approach that was due always won over the Talk menu.
+- **`Game/PlayerSlaverySoft/NpcOwnerBase.gd` (`onNewDay`):** the notice "your owner wants to approach you today" is handed to `Module.onOwnerMeetingDay`, which turns it into a real pending meeting (shown on the owner, the Ownership screen and Side Tasks, kept until the owner's event has started). Without the module the old message is shown.
+- **`project.godot`:** class registration for `SandboxOwnerMeetingQuest`.
+
+**Duplicate-report and check-in correction.** No new base-game edits. The owner's talk menu (`NpcOwnerBase.getTalkActions` calls `Module.getOwnerTalkActions`) now shows one ownership action at a time, by priority (`OwnershipGame.ownerAction`). `SandboxOwnerOps` sets `SUB_CONTINUE` when it is started from that menu (so the conversation returns to the owner menu afterwards, where the next action appears) and calls `stopRunner()` before the night's sleep. The night reuses the vanilla `NpcOwnerSleepTogetherScene` (`PlayerSlaveryModule/Util`), started after the game's own `startNewDay` and `afterSleepingInBed`.
+
+**Manual-test correction (offers, missed nights, rewards, pregnancy, Desire).** No new base-game edits. Module changes only: `Ownership.skippedNights`, the order of `OwnershipGame.ownerTick`, `OwnershipGame.applyDemandReward`, the pregnancy helpers (`pregnancyFacts`, `takeToNursery`, using BDCC's menstrual cycle API and the MedicalModule's `NurseryTalkScene`), `SexAftermath.getAggressorEffects`, and the gang scene opening straight on an offered job.

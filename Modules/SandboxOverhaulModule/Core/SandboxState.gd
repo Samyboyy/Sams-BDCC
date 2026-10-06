@@ -10,7 +10,8 @@ const AxisScript = preload("res://Modules/SandboxOverhaulModule/Relationships/Fe
 # 5 -> 6: gangs (membership, relations, captives, assignment) was added (older saves have no gangs; the established ones are created on first use).
 # 6 -> 7: npc_jobs (the other inmates' jobs) and workplace (events, rivals) were added (older saves have none; jobs are handed out on first use).
 # 7 -> 8: routines (today's plan of each inmate) and presence (where each inmate is and what they are doing) were added (older saves start from where the pawns stand).
-const CURRENT_SCHEMA_VERSION = 8
+# 8 -> 9: ownership (the player's owner, check-ins, demands, warnings, and the roles of the player's slaves) was added (older saves have none; BDCC's own owner and slaves stay as they are and are picked up on first use).
+const CURRENT_SCHEMA_VERSION = 9
 const InjuriesScript = preload("res://Modules/SandboxOverhaulModule/Injuries/Injuries.gd")
 const CellsScript = preload("res://Modules/SandboxOverhaulModule/Cells/Cells.gd")
 const EmploymentScript = preload("res://Modules/SandboxOverhaulModule/Work/Employment.gd")
@@ -20,6 +21,7 @@ const GangsScript = preload("res://Modules/SandboxOverhaulModule/Gangs/Gangs.gd"
 const NpcJobsScript = preload("res://Modules/SandboxOverhaulModule/Work/NpcJobs.gd")
 const PresenceScript = preload("res://Modules/SandboxOverhaulModule/Prison/PresenceState.gd")
 const WorkEventsScript = preload("res://Modules/SandboxOverhaulModule/Work/WorkEvents.gd")
+const OwnershipScript = preload("res://Modules/SandboxOverhaulModule/Ownership/Ownership.gd")
 
 var schema_version: int = CURRENT_SCHEMA_VERSION
 var npc_profiles: Dictionary = {}
@@ -55,6 +57,8 @@ var workplace: Dictionary = WorkEventsScript.defaults()
 # Today's plan of each inmate and where each inmate is. See PresenceState.
 var routines: Dictionary = PresenceScript.defaultRoutines()
 var presence: Dictionary = {}
+# The player's owner and slaves, and the obligations between them. See Ownership.
+var ownership: Dictionary = OwnershipScript.defaults()
 
 const DICT_FIELDS = ["npc_profiles", "directed_relationships", "major_memories", "knowledge", "gang_state", "cooldowns"]
 
@@ -77,6 +81,7 @@ func clear():
 	workplace = WorkEventsScript.defaults()
 	routines = PresenceScript.defaultRoutines()
 	presence = {}
+	ownership = OwnershipScript.defaults()
 
 # Safe getters: missing entries return defaults, never null.
 func getNpcProfile(charID: String) -> Dictionary:
@@ -102,7 +107,7 @@ func getCooldown(key: String, default = 0):
 
 func saveData() -> Dictionary:
 	var data = {"schema_version": schema_version, "obligations": obligations.duplicate(true), "reputation": reputation.duplicate(true), "injuries": injuries.duplicate(true), "cell_assignments": cell_assignments.duplicate(true), "known_cells": known_cells.duplicate(true), "cell_presence": cell_presence.duplicate(true),
-		"work": work.duplicate(true), "upgrades": upgrades.duplicate(true), "hidden_storage": hidden_storage.duplicate(true), "security": security.duplicate(true), "gangs": gangs.duplicate(true), "npc_jobs": npc_jobs.duplicate(true), "workplace": workplace.duplicate(true), "routines": routines.duplicate(true), "presence": presence.duplicate(true)}
+		"work": work.duplicate(true), "upgrades": upgrades.duplicate(true), "hidden_storage": hidden_storage.duplicate(true), "security": security.duplicate(true), "gangs": gangs.duplicate(true), "npc_jobs": npc_jobs.duplicate(true), "workplace": workplace.duplicate(true), "routines": routines.duplicate(true), "presence": presence.duplicate(true), "ownership": ownership.duplicate(true)}
 	for field in DICT_FIELDS:
 		data[field] = get(field).duplicate(true)
 	return data
@@ -142,6 +147,8 @@ func loadData(data) -> void:
 	if(schema_version >= 8):
 		routines = PresenceScript.sanitizeRoutines(data.get("routines"))
 		presence = PresenceScript.sanitizePresence(data.get("presence"))
+	if(schema_version >= 9):
+		ownership = OwnershipScript.sanitize(data.get("ownership"))
 	var loadedObligations = data.get("obligations")
 	if(loadedObligations is Array):
 		obligations = loadedObligations.duplicate(true)
@@ -315,3 +322,7 @@ func migrate() -> void:
 		routines = PresenceScript.defaultRoutines()
 		presence = {}
 		schema_version = 8
+	if(schema_version == 8):
+		# 8 -> 9: a version-8 save has no ownership record: the owner and the slaves BDCC already has are picked up the next time the game runs, with fresh schedules and no warnings.
+		ownership = OwnershipScript.defaults()
+		schema_version = 9

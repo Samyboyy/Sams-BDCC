@@ -26,7 +26,9 @@ func onStart(_args = []):
 	workHoursRemember = workHoursLeft
 	
 	var pawn = GM.main.IS.spawnPawnIfNeeded(getCharID())
-	pawn.setLocation(GM.pc.getCellLocation())
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule == null || !sandboxModule.keepsPrisonersPersistent()):
+		pawn.setLocation(GM.pc.getCellLocation()) # (with the module the slave is already standing in front of the player and walks to the prostitution spots from there)
 	
 func pawnShouldReturnHome() -> bool:
 	#if(workHoursLeft <= 0):

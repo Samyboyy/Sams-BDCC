@@ -147,11 +147,17 @@ func doEnslaveCharacter(npcID, defaultSlaveType = SlaveType.Slut):
 	theChar.setNpcSlavery(newNpcSlavery)
 	newNpcSlavery.onEnslave()
 	
-	GM.main.IS.deletePawn(npcID)
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && sandboxModule.keepsPrisonersPersistent()):
+		sandboxModule.endEnslavingInteractions(npcID) # the pawn stays exactly where it is, with its routine: inmates and slaves are the same persistent people
+	else:
+		GM.main.IS.deletePawn(npcID)
 	GM.main.removeDynamicCharacterFromAllPools(npcID)
 	GM.main.addDynamicCharacterToPool(npcID, CharacterPool.Slaves)
 	
 	GM.main.RS.onGettingEnslavedByPlayer(npcID)
+	if(sandboxModule != null):
+		sandboxModule.onSlaveEnslaved(npcID, theEnslaveQuest != null)
 	
 	return true
 
@@ -171,4 +177,6 @@ func doFreeEnslavedCharacter(npcID):
 	var newPool = theChar.getCharacterPool()
 	if(newPool != null):
 		GM.main.addDynamicCharacterToPool(npcID, newPool)
+	if(GlobalRegistry.getModule("SandboxOverhaulModule") != null):
+		GlobalRegistry.getModule("SandboxOverhaulModule").refreshMapBadges() # the "S" badge goes at once
 	

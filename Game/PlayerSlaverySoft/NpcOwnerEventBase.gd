@@ -76,8 +76,10 @@ const SUB_CONTINUE = 1
 func involveCharID(_role:int, _charID:String, satisfySocial:bool = true):
 	roles[_role] = _charID
 	if(_charID != "pc"):
+		var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+		var keepsPlace:bool = sandboxModule != null && sandboxModule.keepsPrisonersPersistent() && _charID == getOwnerID() # the owner takes part where they physically stand, they are never created or moved next to the player
 		var thePawn:CharacterPawn = GM.main.IS.getPawn(_charID)
-		if(!thePawn):
+		if(!thePawn && !keepsPlace):
 			var theChar:BaseCharacter = GlobalRegistry.getCharacter(_charID)
 			if(!theChar || !theChar.isDynamicCharacter()):
 				return
@@ -86,7 +88,8 @@ func involveCharID(_role:int, _charID:String, satisfySocial:bool = true):
 		if(thePawn):
 			if(satisfySocial):
 				thePawn.satisfySocial()
-			thePawn.setLocation(GM.pc.getLocation())
+			if(!keepsPlace):
+				thePawn.setLocation(GM.pc.getLocation())
 			GM.main.IS.stopInteractionsForPawnID(_charID)
 			GM.main.IS.startInteraction("InNpcOwnerEvent", {main=_charID})
 

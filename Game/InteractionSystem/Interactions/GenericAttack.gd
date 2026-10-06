@@ -32,7 +32,7 @@ func sandboxPlayerSurrender(surrenderingRole:String, otherRole:String):
 	if(getRolePawn(surrenderingRole).isPlayer() && !getRolePawn(otherRole).isPlayer()):
 		sandboxModule.onPlayerSurrender(self, getRoleID(otherRole))
 	elif(!getRolePawn(surrenderingRole).isPlayer() && getRolePawn(otherRole).isPlayer()):
-		sandboxModule.onNpcSurrender(getRoleID(surrenderingRole)) # an NPC the player attacked gave up before any fight
+		sandboxModule.onNpcSurrender(getRoleID(surrenderingRole), self) # an NPC the player attacked gave up before any fight
 
 # Sandbox overhaul (see CORE_PATCHES.md): when two other people fight, the player can take a side or try to break it up, not only watch.
 func getInterruptActions(_pawn:CharacterPawn) -> Array:

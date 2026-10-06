@@ -115,6 +115,7 @@ func _run():
 			addButton("Work", "Your prison job, today's shift and your record", "workMenu")
 			addButton("Security", "How much attention prison security is paying to you", "securityMenu")
 			addButton("Gangs", "Gangs, your standing with them and your own gang", "gangsMenu")
+			addButton("Ownership", "Who owns you, what they expect, and the slaves you own", "ownershipMenu")
 		if(!GM.main.isInDungeon()):
 			addButton("Look for trouble", "Try to find an encounter", "lookfortrouble")
 		if(!getFlag("Game_PickedStartingPerks", false)):
@@ -250,6 +251,10 @@ func _react(_action: String, _args):
 	
 	if(_action == "gangsMenu"):
 		runScene("GangScene")
+		return
+
+	if(_action == "ownershipMenu"):
+		runScene("OwnershipScene")
 		return
 
 	if(_action == "lookfortrouble"):

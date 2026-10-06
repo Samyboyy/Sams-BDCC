@@ -8,7 +8,9 @@ func getVisibleName():
 
 func onStart(_args = []):
 	var pawn = GM.main.IS.spawnPawnIfNeeded(getCharID())
-	pawn.setLocation("main_punishment_spot")
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule == null || !sandboxModule.keepsPrisonersPersistent()):
+		pawn.setLocation("main_punishment_spot") # (with the module the slave was taken there together with the player, see the punishment scene)
 	GM.main.IS.startInteraction("InStocks", {inmate=getCharID()})
 
 func onNewDay():

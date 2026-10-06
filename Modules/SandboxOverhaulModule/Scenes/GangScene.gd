@@ -29,6 +29,10 @@ func _init():
 
 func _initScene(_args = []):
 	npcID = str(_args[0]) if (_args is Array && _args.size() > 0) else ""
+	GangGameScript.ensureInitialized()
+	var offer:Dictionary = a().getAssignment()
+	if(npcID != "" && !offer.empty() && str(offer.get("state", "")) == "offered" && npcID == g().getLeader(str(offer.get("gang", "")))):
+		setState("job") # their leader has a job for you: talking to them about gangs opens it straight away
 
 func g():
 	return GangGameScript.gangs()

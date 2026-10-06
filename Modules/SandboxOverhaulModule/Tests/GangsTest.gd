@@ -93,7 +93,7 @@ func _init():
 	check(JSON.print(m2[0].gangs["gangs"], "", true) == JSON.print(s.gangs["gangs"], "", true), "the result does not depend on the order of the list")
 	var loaded = StateScript.new()
 	loaded.loadData(JSON.parse(JSON.print(s.saveData())).result)
-	check(JSON.print(loaded.gangs, "", true) == JSON.print(s.gangs, "", true) and loaded.schema_version == 8, "membership, leaders, relations and slaves are stable across save and load")
+	check(JSON.print(loaded.gangs, "", true) == JSON.print(s.gangs, "", true) and loaded.schema_version == 9, "membership, leaders, relations and slaves are stable across save and load")
 	check(ServiceScript.affiliationTarget(0) == 0 and ServiceScript.affiliationTarget(1) == 1 and ServiceScript.affiliationTarget(8) == 4 and ServiceScript.affiliationTarget(9) == 4 and ServiceScript.affiliationTarget(15) == 6 and ServiceScript.affiliationTarget(23) == 10 and ServiceScript.affiliationTarget(30) == 12 and ServiceScript.affiliationTarget(40) == 16 and ServiceScript.affiliationTarget(-5) == 0, "the target is ceil(0.40 x eligible), never more than the eligible")
 
 	# ---- Population sizes: formation, growth, no reshuffling ----
@@ -779,7 +779,7 @@ func _init():
 	check(original["gangs"]["ironhand"]["members"] == ["a"], "sanitising never aliases the input")
 	var oldSave = StateScript.new()
 	oldSave.loadData({"schema_version": 5, "security": {"attention": 40}, "gangs": {"init": true, "gangs": {"ironhand": {"name": "X", "members": ["a"]}}}})
-	check(oldSave.schema_version == 8 and JSON.print(oldSave.gangs) == JSON.print(ServiceScript.defaults()) and oldSave.security["attention"] == 40.0, "a version 5 save has no gangs (even with a stray field) and keeps its security state")
+	check(oldSave.schema_version == 9 and JSON.print(oldSave.gangs) == JSON.print(ServiceScript.defaults()) and oldSave.security["attention"] == 40.0, "a version 5 save has no gangs (even with a stray field) and keeps its security state")
 	oldSave.loadData({"schema_version": 99, "gangs": {"init": true}})
 	check(oldSave.schema_version == 99, "a newer save keeps its version")
 	oldSave.loadData({"schema_version": 6, "gangs": "junk"})

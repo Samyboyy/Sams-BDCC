@@ -197,7 +197,7 @@ func _ready():
 
 	# ---- Home, away and failed to return for inmates something keeps elsewhere ----
 	SandboxOverhaulModule.getState().cell_presence.clear()
-	check(module.getAttendance("slave1") == "away" and !module.isInCell("slave1") and module.hasFailedToReturn("slave1"), "an unspawned enslaved inmate is away")
+	check(!module.isKeptElsewhere("slave1") and module.getAttendance("slave1") == "home" and module.isInCell("slave1") and !module.hasFailedToReturn("slave1"), "an enslaved inmate is an ordinary inmate living in their cell: unspawned means home, like anybody")
 	check(cells.getCell("slave1")["cell"] == 2 and cells.getCell("slave1")["block"] == "red", "and keeps their assigned cell")
 	var mateCell = JSON.print(stateRef.cell_assignments["i01"])
 	var assignmentsBefore = JSON.print(stateRef.cell_assignments)
@@ -209,8 +209,8 @@ func _ready():
 	check(module.refreshCells() == 0 and JSON.print(stateRef.cell_assignments) == assignmentsBefore, "enslaving the cellmate changes no assignment")
 	check(module.getPlayerCellmate() == "i01" and JSON.print(stateRef.cell_assignments["i01"]) == mateCell, "the player's cellmate is still that person")
 	setTime(22, 40, 9)
-	check(module.getAttendance("i01") == "away" and !module.isInCell("i01") and module.hasFailedToReturn("i01"), "the enslaved cellmate is now away, so the player can notice")
-	check(module.getMyCellText().find("[color=green]i01[/color] (" + "[color=#c8b560]not here[/color])") != -1, "the player's cell text shows the missing cellmate: " + module.getMyCellText())
+	check(module.getAttendance("i01") == "home" and module.isInCell("i01") and !module.hasFailedToReturn("i01"), "the enslaved cellmate still sleeps in the cell like anybody else (owning someone does not take them out of the prison)")
+	check(module.getMyCellText().find("not here") == -1, "the player's cell text shows nobody missing: " + module.getMyCellText())
 	mate.slaveFlag = false
 	main.removeDynamicCharacterFromAllPools("i01")
 	main.addDynamicCharacterToPool("i01", CharacterPool.Inmates)
@@ -262,7 +262,7 @@ func _ready():
 	var saved = JSON.parse(JSON.print(GM.GES.saveData())).result
 	var savedCells = saved["extendersData"]["SandboxGameExtender"]["cell_assignments"]
 	check(!savedCells.has("i02") and savedCells.has("i03") and savedCells.has("pc"), "a removed character is pruned before saving")
-	check(saved["extendersData"]["SandboxGameExtender"]["schema_version"] == 8 and saved["extendersData"]["SandboxGameExtender"]["known_cells"]["pc"].has("i04"), "saved at schema 8 with the known cells")
+	check(saved["extendersData"]["SandboxGameExtender"]["schema_version"] == 9 and saved["extendersData"]["SandboxGameExtender"]["known_cells"]["pc"].has("i04"), "saved at schema 8 with the known cells")
 	SandboxOverhaulModule.getState().clear()
 	GM.GES.loadData(JSON.parse(JSON.print(saved)).result)
 	check(SandboxOverhaulModule.getCells().getCell("i03")["cell"] == 2 and SandboxOverhaulModule.getCells().getCellmate("pc") == "i01" and SandboxOverhaulModule.getCells().knowsCell("pc", "i04"), "assignments and learned cells survive a load exactly")
@@ -275,7 +275,7 @@ func _ready():
 
 	# An older save without cells loads and creates them on first use
 	SandboxOverhaulModule.getState().loadData({"schema_version": 2, "injuries": {}})
-	check(SandboxOverhaulModule.getState().cell_assignments.empty() and SandboxOverhaulModule.getState().schema_version == 8, "an older save loads with no cells")
+	check(SandboxOverhaulModule.getState().cell_assignments.empty() and SandboxOverhaulModule.getState().schema_version == 9, "an older save loads with no cells")
 	check(module.refreshCells() > 0 and SandboxOverhaulModule.getCells().isAssigned("pc") and SandboxOverhaulModule.getCells().getCell("pc")["cell"] == 1, "and the cells are created on first use, the player first")
 
 	var main2 = load("res://Game/MainScene.gd").new()

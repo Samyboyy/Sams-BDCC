@@ -15,7 +15,9 @@ func getInteractActions():
 
 func onStart(_args = []):
 	var pawn = GM.main.IS.spawnPawnIfNeeded(getCharID())
-	pawn.setLocation("fight_slutwall")
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule == null || !sandboxModule.keepsPrisonersPersistent()):
+		pawn.setLocation("fight_slutwall")
 	GM.main.IS.startInteraction("InSlutwall", {inmate=getCharID()})
 
 func onInteractionChanged(_newInteraction):

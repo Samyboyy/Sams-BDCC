@@ -95,7 +95,8 @@ func _init():
 	var _poorRun = AftermathScript.apply(r, ConsentScript.CONSENSUAL, "pc", "npcF", 0.1, 0.1)
 	check(r.getFeeling("npcF", "pc", "affection") < 0.0 and r.getFeeling("npcF", "pc", "desire") < 0.0 and r.getFeeling("npcF", "pc", "fear") == 0.0, "poor consensual is negative")
 	check(AftermathScript.apply(r, ConsentScript.UNKNOWN, "pc", "npcG", 1.0, 1.0).empty() and !r.hasRelationship("npcG", "pc"), "unknown applies nothing")
-	check(AftermathScript.apply(r, ConsentScript.FORCED, "npcH", "pc", 1.0, 1.0).size() == 0 and !r.hasRelationship("npcH", "pc"), "player victim stores nothing")
+	var pcVictim = AftermathScript.apply(r, ConsentScript.FORCED, "npcH", "pc", 1.0, 1.0)
+	check(pcVictim.size() == 1 and pcVictim[0]["observer"] == "npcH" and pcVictim[0]["target"] == "pc" and r.getFeeling("npcH", "pc", "desire") == 5.0 and r.getFeeling("npcH", "pc", "affection") == 0.0 and !r.hasRelationship("pc", "npcH"), "player victim: only the aggressor's Desire for the player is stored (+5, NPC -> player)")
 	check(AftermathScript.apply(r, ConsentScript.FORCED, "", "npcI", 1.0, 1.0).empty() and AftermathScript.apply(r, ConsentScript.FORCED, "x", "x", 1.0, 1.0).empty(), "invalid ids apply nothing")
 
 	# Message

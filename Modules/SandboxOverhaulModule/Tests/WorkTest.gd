@@ -255,7 +255,7 @@ func _init():
 	check(s.upgrades["hidden"] and !s.upgrades["storage"], "the hidden compartment and the locker are separate purchases")
 
 	# ---- State: schema 4, save and load ----
-	check(s.schema_version == 8 and StateScript.CURRENT_SCHEMA_VERSION == 8, "schema 6")
+	check(s.schema_version == 9 and StateScript.CURRENT_SCHEMA_VERSION == 9, "schema 6")
 	var saved = JSON.parse(JSON.print(s.saveData())).result
 	var t = StateScript.new()
 	t.loadData(saved)
@@ -284,9 +284,9 @@ func _init():
 	# Older saves: unemployed, nothing bought, nothing stored
 	var oldState = StateScript.new()
 	oldState.loadData({"schema_version": 3, "work": {"job": "mining"}, "upgrades": {"storage": true}, "hidden_storage": [record("a", "y")], "reputation": {"combat": 5.0, "defiance": 0.0}})
-	check(oldState.schema_version == 8 and oldState.work["job"] == "" and !oldState.upgrades["storage"] and oldState.hidden_storage.empty(), "a version 3 save is unemployed with no upgrades, even if it has stray fields")
+	check(oldState.schema_version == 9 and oldState.work["job"] == "" and !oldState.upgrades["storage"] and oldState.hidden_storage.empty(), "a version 3 save is unemployed with no upgrades, even if it has stray fields")
 	oldState.loadData({"schema_version": 1})
-	check(oldState.schema_version == 8 and JSON.print(oldState.work) == JSON.print(EmploymentScript.defaults()) and !oldState.upgrades["comfort"], "a version 1 save migrates")
+	check(oldState.schema_version == 9 and JSON.print(oldState.work) == JSON.print(EmploymentScript.defaults()) and !oldState.upgrades["comfort"], "a version 1 save migrates")
 	oldState.loadData({"schema_version": 99, "work": {"job": "mining"}})
 	check(oldState.schema_version == 99, "a newer save keeps its version")
 	oldState.loadData({"schema_version": 4, "work": "junk", "upgrades": [1], "hidden_storage": {"a": 1}})

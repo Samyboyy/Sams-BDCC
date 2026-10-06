@@ -8,6 +8,10 @@ func onStart(_args:Array):
 	if(!theNpcOwner):
 		return
 	
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && sandboxModule.ownerHasCompletedDemand()):
+		runEvent("", "Talk") # a finished demand is reported in the talk menu, at any time: it must not wait for the owner's own approach
+		return
 	var shouldGetApproached:bool = theNpcOwner.shouldOwnerApproachPC()
 	
 	if(shouldGetApproached):

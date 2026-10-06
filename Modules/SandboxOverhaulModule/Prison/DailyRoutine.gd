@@ -20,7 +20,7 @@ const LayoutScript = preload("res://Modules/SandboxOverhaulModule/Prison/CellLay
 const DAY_START = 6 * 3600
 const DAY_END = 30 * 3600
 const MIN_SEGMENT = 20 * 60
-const KINDS = ["sleep", "work", "finish", "meal", "shower", "gym", "yard", "underground", "hall", "cellhall", "cellrest", "hangout", "social", "visit", "held", "enslaved"]
+const KINDS = ["sleep", "work", "finish", "earn", "attend", "report", "escape", "hunt", "wait", "nightcell", "meal", "shower", "gym", "yard", "underground", "hall", "cellhall", "cellrest", "hangout", "social", "visit", "held", "enslaved"]
 const FINISH_SECONDS = 10 * 60 # after a shift the workers pack up for ten minutes at the workplace, then leave for their next activity
 const GANG_WINDOW_START = 15 * 3600
 const GANG_WINDOW_END = 17 * 3600 + 30 * 60
@@ -269,6 +269,20 @@ static func describe(kind:String, here:String, target:String, placeText:String =
 			return "{main.name} is heading to " + ("Cell " + str(cellNumber) if cellNumber > 0 else "{main.his} cell") + "."
 		"work":
 			return ("{main.name} is working in " + placeText + ".") if arrived else ("{main.name} is heading to work in " + placeText + ".")
+		"earn":
+			return "{main.name} is out earning credits for {main.his} owner." if arrived else "{main.name} is heading out to earn credits."
+		"attend":
+			return "{main.name} is waiting nearby, in case they are needed." if arrived else "{main.name} is heading over to wait nearby."
+		"report":
+			return "{main.name} is waiting at your cell." if arrived else "{main.name} is on {main.his} way to your cell."
+		"wait":
+			return "{main.name} is waiting for your instructions."
+		"nightcell":
+			return "{main.name} is sleeping in your cell." if arrived else "{main.name} is heading to your cell."
+		"escape":
+			return "{main.name} is trying to slip away." if arrived else "{main.name} is heading for the exit, in a hurry."
+		"hunt":
+			return "{main.name} is looking for somebody." if arrived else "{main.name} is going after somebody."
 		"finish":
 			return "{main.name} is finishing {main.his} shift in " + placeText + "." if arrived else "{main.name} is heading back to " + placeText + " to finish up."
 		"meal":

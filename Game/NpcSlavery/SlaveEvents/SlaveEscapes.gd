@@ -5,6 +5,9 @@ func _init():
 	eventWeight = 1.0
 
 func canHappen(_npcSlavery:NpcSlave):
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && sandboxModule.handlesSlaveEscapes()):
+		return false # the module telegraphs escapes (a missed report, a warning, a visible attempt) instead of this silent roll
 	if(_npcSlavery.isMindBroken()):
 		return false
 	if(_npcSlavery.getChar().getInventory().hasRemovableRestraints()):

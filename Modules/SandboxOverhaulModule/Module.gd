@@ -27,6 +27,18 @@ const GANG_TASKS = ["res://Modules/SandboxOverhaulModule/Gangs/GangHangoutTask0.
 const ENFORCEMENT_INTERACTION = "res://Modules/SandboxOverhaulModule/Interactions/GuardEnforcement.gd"
 const HELP_REQUEST_INTERACTION = "res://Modules/SandboxOverhaulModule/Interactions/HelpRequest.gd"
 const HelpRequestsScript = preload("res://Modules/SandboxOverhaulModule/Interactions/HelpRequests.gd")
+const OwnershipGameScript = preload("res://Modules/SandboxOverhaulModule/Ownership/OwnershipGame.gd")
+const OwnershipScript = preload("res://Modules/SandboxOverhaulModule/Ownership/Ownership.gd")
+const OWNER_OPS_EVENT = "res://Modules/SandboxOverhaulModule/Ownership/OwnerOpsEvent.gd"
+const SLAVE_ACTIONS = [
+	"res://Modules/SandboxOverhaulModule/Ownership/SlaveActions/SbxTalkHoldingUp.gd", "res://Modules/SandboxOverhaulModule/Ownership/SlaveActions/SbxTalkRole.gd",
+	"res://Modules/SandboxOverhaulModule/Ownership/SlaveActions/SbxTalkRelease.gd", "res://Modules/SandboxOverhaulModule/Ownership/SlaveActions/SbxTalkRoundEscape.gd",
+	"res://Modules/SandboxOverhaulModule/Ownership/SlaveActions/SbxTalkWarnOff.gd", "res://Modules/SandboxOverhaulModule/Ownership/SlaveActions/SbxRewardCredits.gd",
+	"res://Modules/SandboxOverhaulModule/Ownership/SlaveActions/SbxRewardTreat.gd", "res://Modules/SandboxOverhaulModule/Ownership/SlaveActions/SbxActionRoleFree.gd",
+	"res://Modules/SandboxOverhaulModule/Ownership/SlaveActions/SbxActionRoleEarner.gd", "res://Modules/SandboxOverhaulModule/Ownership/SlaveActions/SbxActionRoleAttendant.gd",
+	"res://Modules/SandboxOverhaulModule/Ownership/SlaveActions/SbxActionRoleRest.gd", "res://Modules/SandboxOverhaulModule/Ownership/SlaveActions/SbxActionReport.gd",
+	"res://Modules/SandboxOverhaulModule/Ownership/SlaveActions/SbxActionCollect.gd", "res://Modules/SandboxOverhaulModule/Ownership/SlaveActions/SbxActionStopByForce.gd",
+]
 
 func _init():
 	id = "SandboxOverhaulModule"
@@ -41,6 +53,9 @@ func _init():
 		"res://Modules/SandboxOverhaulModule/Scenes/WorkShiftScene.gd",
 		"res://Modules/SandboxOverhaulModule/Scenes/CellUpgradesScene.gd",
 		"res://Modules/SandboxOverhaulModule/Scenes/GangScene.gd",
+		"res://Modules/SandboxOverhaulModule/Scenes/OwnershipScene.gd",
+		"res://Modules/SandboxOverhaulModule/Scenes/SlaveInstructionsScene.gd",
+		"res://Modules/SandboxOverhaulModule/Scenes/OwnershipDisputeScene.gd",
 	]
 
 	worldEdits = [
@@ -53,6 +68,10 @@ func _init():
 	quests = [
 		"res://Modules/SandboxOverhaulModule/Quests/GangAssignmentQuest.gd",
 		"res://Modules/SandboxOverhaulModule/Quests/GangAssignmentDoneQuest.gd",
+		"res://Modules/SandboxOverhaulModule/Quests/OwnerCheckInQuest.gd",
+		"res://Modules/SandboxOverhaulModule/Quests/OwnerDemandQuest.gd",
+		"res://Modules/SandboxOverhaulModule/Quests/OwnerMeetingQuest.gd",
+		"res://Modules/SandboxOverhaulModule/Quests/SlaveAttentionQuest.gd",
 	]
 
 	statusEffects = [
@@ -65,6 +84,9 @@ func _init():
 func postInit():
 	GlobalRegistry.registerInteraction(ENFORCEMENT_INTERACTION)
 	GlobalRegistry.registerInteraction(HELP_REQUEST_INTERACTION)
+	GlobalRegistry.registerNpcOwnerEvent(OWNER_OPS_EVENT)
+	for path in SLAVE_ACTIONS:
+		GlobalRegistry.registerSlaveAction(path)
 	for path in GANG_TASKS:
 		GlobalRegistry.registerGlobalTask(path)
 
@@ -112,6 +134,11 @@ static func getNpcJobs():
 	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
 	return extender.getNpcJobs()
 
+# Ownership service (the player's owner, check-ins, demands, the player's slaves). Do not cache it across games; call this each time.
+static func getOwnership():
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	return extender.getOwnership()
+
 static func getGangAffairs():
 	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
 	return extender.getGangAffairs()
@@ -137,7 +164,11 @@ func applySexAftermathAndShouldRunVanilla(interaction, sexData, sexResult) -> bo
 		return false
 	if(consent == ConsentScript.FORCED && domID == "pc"):
 		recordWitnessedForcedSex(interaction)
+	return applySexConsent(consent, domID, subID, sexResult)
 
+# The sandbox aftermath of one sex scene whose consent category is known (CONSENSUAL, COERCED or FORCED): the interaction route above, and the owner's nights (which are owner events, not interactions).
+# Returns whether the vanilla relationship aftermath should still run (only after a consensual one).
+func applySexConsent(consent:int, domID:String, subID:String, sexResult) -> bool:
 	var results:Array = AftermathScript.apply(getRelationships(), consent, domID, subID, sexResult.getAverageDomSatisfaction(), sexResult.getAverageSubSatisfaction())
 	for entry in results:
 		var npcID:String = entry["observer"] if entry["target"] == "pc" else ""
@@ -212,12 +243,18 @@ func runCombatOutcome(npcID, outcome:String, margin = -1.0) -> Dictionary:
 
 # After an interaction fight. result is {won, how, margin} from the fight scene. Only fights involving the player count.
 func onFightAftermath(interaction, wonID, lostID, result) -> void:
-	if(!(result is Dictionary) || !(wonID is String) || !(lostID is String) || (wonID == "pc") == (lostID == "pc")):
+	if(!(result is Dictionary) || !(wonID is String) || !(lostID is String)):
 		return
-	GangGameScript.onFightResult(wonID, lostID)
+	if((wonID == "pc") == (lostID == "pc")):
+		OwnershipGameScript.onNpcFightResult(wonID, lostID) # fights between two others still matter to the player's owner
+		return
 	if(wonID == "pc"):
+		var _counted:bool = onPlayerBeatNpc(lostID, "submit" if result.get("submitter", "") == lostID else "fight", interaction) # pain, lust or the target submitting: one shared place
 		var _w:Dictionary = runCombatOutcome(lostID, CombatScript.WIN)
 		return
+	GangGameScript.onFightResult(wonID, lostID)
+	var _acknowledged:bool = HelpRequestsScript.acknowledge(self, wonID, false) # the player lost a fight they joined for somebody: a smaller thanks
+	OwnershipGameScript.onPlayerLost(wonID) # a defeat by somebody who is not staff may leave the player restrained: the owner may come
 	if(result.get("submitter", "") == "pc"):
 		# The player pressed Submit before being defeated. A pain or lust defeat is never treated as surrender.
 		interaction.sandboxDefeatKind = CombatScript.DEFEAT_SURRENDERED
@@ -228,14 +265,35 @@ func onFightAftermath(interaction, wonID, lostID, result) -> void:
 
 # The player chose "Surrender" in an interaction before any fight.
 func onPlayerSurrender(interaction, npcID) -> void:
+	OwnershipGameScript.onPlayerLost(npcID)
 	interaction.sandboxDefeatKind = CombatScript.DEFEAT_SURRENDERED
 	var _s:Dictionary = runCombatOutcome(npcID, CombatScript.SURRENDER)
 
 # An NPC the player attacked gave up before any fight (GenericAttack's surrender choice, which an NPC makes from fear or a poor chance). The player has beaten them for every gang purpose.
-func onNpcSurrender(npcID) -> void:
-	if(!isMainReady() || !(npcID is String) || npcID == "pc"):
-		return
-	GangGameScript.onFightResult("pc", npcID)
+func onNpcSurrender(npcID, source = null) -> void:
+	var _counted:bool = onPlayerBeatNpc(npcID, "surrender", source)
+
+# The one place where "the player beat this person" is reported to every task that asks for it (gang assignments, the owner's demands, and whatever uses them): by pain, by lust, because they submitted in the fight,
+# or because they gave up before any fight. How they yielded does not matter, only that they yielded to the player. It never counts when the player loses, submits or walks away, or when somebody else beats them
+# (nothing calls it then). source is the interaction, so reporting the same encounter twice (a fight result and a surrender line in one interaction) counts once. Returns whether it counted.
+func onPlayerBeatNpc(targetID, how:String, source = null) -> bool:
+	if(!isMainReady() || !(targetID is String) || targetID == "" || targetID == "pc"):
+		return false
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	if(source != null):
+		var key:String = str(source.get_instance_id()) + ":" + str(source.get("sandboxFightStamp") if source.get("sandboxFightStamp") != null else "")
+		if(extender.yieldKeys.get(targetID, "") == key):
+			return false
+		extender.yieldKeys[targetID] = key
+	GangGameScript.onFightResult("pc", targetID)
+	OwnershipGameScript.onPlayerWon(targetID, "surrender" if how in ["surrender", "submit"] else "fight")
+	var _thanked:bool = HelpRequestsScript.acknowledge(self, targetID, true) # the fight was somebody's request for help
+	refreshMapBadges()
+	return true
+
+# The clock the help requests and other module records use (seconds since the start of the game's days).
+func getHelpClock() -> int:
+	return OwnershipGameScript.clockNow() if isMainReady() else 0
 
 # The player started an ordinary, unprovoked fight with this NPC.
 func onUnprovokedAttack(npcID) -> void:
@@ -256,7 +314,8 @@ func getGangTaskView(archived:bool) -> Dictionary:
 	return GangGameScript.taskDoneView() if archived else GangGameScript.taskView()
 
 func getAttackMultiplier(npcID) -> float:
-	return getCombat().attackMultiplier(npcID) * GangGameScript.protectionMultiplier(npcID)
+	var combined:float = getCombat().attackMultiplier(npcID) * GangGameScript.protectionMultiplier(npcID) * OwnershipGameScript.protectionMultiplier(npcID)
+	return max(combined, OwnershipGameScript.PROTECTION_FLOOR_TOTAL) # gang, owner, fear and reputation together never make anybody immune
 
 func getDefeatPunishMultiplier(kind) -> float:
 	return CombatScript.defeatPunishMultiplier(kind)
@@ -481,10 +540,10 @@ func isPawnBlocked(pawn) -> bool:
 	if(interaction != null && interaction.goal != null && PRIORITY_GOALS.has(interaction.goal.id)):
 		return true
 	var theChar = pawn.getChar()
-	if(theChar == null || theChar.isSlaveToPlayer() || theChar.hasEnslaveQuest()):
+	if(theChar == null || theChar.hasEnslaveQuest()):
 		return true
-	if(GM.main.RS.hasSpecialRelationshipID(pawn.charID, "SoftSlavery")):
-		return true
+	if(theChar.isSlaveToPlayer() && theChar.getNpcSlavery() != null && theChar.getNpcSlavery().isDoingActivity()):
+		return true # BDCC's own slave activities (walkies, prostitution, stocks...) keep the slave busy
 	return false
 
 # Called by the extender's pcProcessTime hook. Runs the schedule at most once per ten in-game minutes.
@@ -499,13 +558,13 @@ func onScheduleTick() -> void:
 	var _placed:int = refreshCells()
 	var _result:Dictionary = sweepResidents()
 
-# True when something detectable keeps this inmate away from their cell: the player owns them, they are in SoftSlavery, or they are on an
-# enslave quest. This says nothing about where they are, only that they are not simply unspawned in bed.
+# True when something detectable keeps this inmate away from their cell: they are on an enslave quest or a gang holds them. The player's owner and the player's own slaves are ordinary inmates
+# that live in their own cells and follow their own routines (see Ownership/), so they are not kept elsewhere. This says nothing about where anybody is.
 func isKeptElsewhere(characterID) -> bool:
 	var theChar = GM.main.getCharacter(characterID)
 	if(theChar == null):
 		return false
-	return theChar.isSlaveToPlayer() || theChar.hasEnslaveQuest() || GM.main.RS.hasSpecialRelationshipID(characterID, "SoftSlavery") || getGangs().isCaptive(characterID) # captives and a gang's slaves are away at night
+	return theChar.hasEnslaveQuest() || getGangs().isCaptive(characterID) # captives and a gang's slaves are away at night
 
 # Home or away for tonight, "" outside the character's night or without a cell. A recorded state for tonight wins; without one it is worked out
 # now: a pawn that is still out, or a condition that keeps them elsewhere, means away; an inmate who is simply not spawned is assumed home.
@@ -623,8 +682,8 @@ func canSpawnPawnType(pawnTypeID) -> bool:
 	if(!isMainReady() || GM.main.IS == null):
 		return true
 	if(pawnTypeID == CharacterType.Inmate):
-		# Every inmate already has a pawn for good; BDCC may still bring new prisoners, up to a population that stays cheap to simulate and to draw.
-		return getDirectedInmateIDs().size() < POPULATION_CAP
+		# Every inmate already has a pawn for good; BDCC may still bring new prisoners, but on the prison's schedule (see PrisonSchedule.inmateLimit): quickly at first, then fewer, never past the hard cap.
+		return ScheduleScript.mayAdmitInmate(getDirectedInmateIDs().size(), GM.main.getDays())
 	var kind:String = ""
 	if(pawnTypeID == CharacterType.Guard):
 		kind = "guard"
@@ -638,8 +697,20 @@ func canSpawnPawnType(pawnTypeID) -> bool:
 	var budget:Dictionary = ScheduleScript.budgets(GM.main.IS.getMaxPawnCount(), getDirectedInmateIDs().size())
 	return counts[kind] < budget[kind]
 
-# The most inmates the prison takes in: all of them are simulated and drawn all the time, so this keeps the cost bounded (60 were measured).
-const POPULATION_CAP = 45
+# Whether a new character may be created for this pool by an event, a scene or a spawner (see NpcFinder.generateNpcForPool): inmates up to the hard cap, staff up to their limits. Existing characters are never touched.
+func mayCreateCharacter(poolID) -> bool:
+	if(!isMainReady()):
+		return true
+	var stored:int = GM.main.getDynamicCharactersPoolSize(poolID)
+	if(poolID == CharacterPool.Inmates):
+		return stored < ScheduleScript.INMATE_HARD_CAP
+	if(poolID == CharacterPool.Guards):
+		return stored < ScheduleScript.MAX_GUARDS
+	if(poolID == CharacterPool.Nurses):
+		return stored < ScheduleScript.MAX_NURSES
+	if(poolID == CharacterPool.Engineers):
+		return stored < ScheduleScript.MAX_ENGINEERS
+	return true
 
 # Whether a pawn is kept from one day to the next (see InteractionSystem.deleteAllNonImportantPawns): the prison's inmates and staff are, so a new day never wipes the prison.
 func keepPawnAcrossDays(characterID) -> bool:
@@ -656,6 +727,30 @@ func getGangBadge(characterID) -> Dictionary:
 	if(!isMainReady()):
 		return {}
 	return GangGameScript.badgeFor(characterID)
+
+# The yellow "Q" for somebody a tracked module task points at (a defeat target, a delivery recipient, a capture or rescue target, a gang leader or the owner to report back to, a slave about to run): derived from the live
+# task state of the gang jobs and the ownership tasks, never stored. {} when none.
+func getTaskBadge(characterID) -> Dictionary:
+	if(!isMainReady() || !(characterID is String) || characterID == "pc"):
+		return {}
+	var marks:Array = GangGameScript.taskMarks(characterID) + OwnershipGameScript.taskMarks(characterID)
+	if(marks.empty()):
+		return {}
+	var lines:Array = []
+	for mark in marks:
+		lines.append(("Task target: " if mark[0] == "target" else "Task contact: ") + str(mark[1]))
+	return {"text": "Q", "color": Color(1.0, 0.85, 0.1), "tooltip": PoolStringArray(lines).join("\n"), "marks": marks}
+
+# The map badge for somebody the player owns: a purple "S". Nobody else gets it (a gang's own slaves are not the player's).
+func getSlaveBadge(characterID) -> Dictionary:
+	if(!isMainReady() || !isOwnedSlave(characterID)):
+		return {}
+	return {"text": "S", "color": Color(0.85, 0.35, 0.95), "tooltip": "Your slave."}
+
+# The pawns on the map are redrawn now (a badge appears or goes the moment somebody is enslaved, escapes or is freed).
+func refreshMapBadges() -> void:
+	if(isMainReady() && GM.world != null && is_instance_valid(GM.world) && GM.main.IS != null):
+		GM.world.updatePawns(GM.main.IS)
 
 # The name of the gang an inmate meets at its hangout ("" when they are in none), for the text "hanging out with Ironhand".
 func hangoutLabel(characterID) -> String:
@@ -760,6 +855,9 @@ func learnCell(npcID) -> bool:
 # Called by GenericAttack when a fight between two other people starts: somebody bound to the player may ask them for help (see Interactions/HelpRequests.gd).
 func onNpcFightStarted(fight) -> void:
 	if(!isMainReady()):
+		return
+	if(fight != null && fight.getRoleID("reacter") == "pc" && fight.getRoleID("starter") != "pc"):
+		var _helper:String = OwnershipGameScript.onPlayerAttacked(fight, fight.getRoleID("starter")) # the owner remembers, and steps in if they are right there
 		return
 	var _asker:String = HelpRequestsScript.onFightStarted(self, fight)
 
@@ -870,10 +968,6 @@ func getBlockedReason() -> String:
 		return ""
 	if(GM.main.PS != null):
 		return "serving as a slave"
-	if(GM.main.RS != null):
-		for ownerID in GM.main.RS.special:
-			if(GM.pc.isSlaveTo(ownerID)):
-				return "owned by " + characterName(ownerID)
 	for scene in GM.main.sceneStack:
 		if(scene.sceneID == "NpcOwnerEventRunnerScene"):
 			return "kept busy by your owner"
@@ -962,6 +1056,7 @@ func startShift(jobID) -> Dictionary:
 	var wage:int = employment.completeShift(jobID, day, timeOfDay)
 	if(wage <= 0):
 		return {"ok": false, "reason": "You have no shift to do today."}
+	OwnershipGameScript.onShiftCompleted()
 	var crew:Array = beginShiftCrew(jobID) # who is at the workplace as the shift begins, before any time passes
 	GM.pc.addCredits(wage)
 	GM.pc.addStamina(-int(EmploymentScript.JOBS[jobID]["stamina"]))
@@ -1568,3 +1663,223 @@ func applyNudityFine(guardID:String) -> String:
 # Every ten in-game minutes: set up, tidy, captives, jobs, the day's upkeep and any gang incident. All the rules live in GangGame.
 func onGangTick() -> void:
 	GangGameScript.tick()
+
+# ---- Ownership (see Ownership/): BDCC's SoftSlavery and NPC slavery stay as they are, with obligations, protection and ways out on top ----
+
+# Called by the extender's pcProcessTime hook, at most once per five in-game minutes (force: tests).
+func onOwnershipTick(force:bool = false) -> void:
+	if(!isMainReady() || GM.main.isInDungeon() || GM.main.IS == null):
+		return
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	var bucket:int = GM.main.getDays() * 288 + int(GM.main.getTime() / 300)
+	if(!force && extender.ownershipBucket == bucket):
+		return
+	extender.ownershipBucket = bucket
+	OwnershipGameScript.reconcile()
+	OwnershipGameScript.ownerTick(force)
+	OwnershipGameScript.slaveTick()
+	var _hunted:bool = OwnershipGameScript.retaliationTick()
+
+# Where the owner or one of the player's slaves is wanted right now beyond their ordinary day: {} or {"kind", "room"}. Used by the population director.
+func getRoutineOverride(characterID, day:int, axis:int) -> Dictionary:
+	return OwnershipGameScript.routineOverride(characterID, day, axis)
+
+# True while the owner has something to say to the player (a warning or a demand) and should walk up to them.
+func ownerWantsToSeePlayer() -> bool:
+	return OwnershipGameScript.ownerWantsToSeePlayer()
+
+# The extra entries of the owner's talk menu: [name, description, id, args] or [name, reason] when not possible now.
+func getOwnerTalkActions(_npcOwner) -> Array:
+	var actions:Array = []
+	if(!isMainReady()):
+		return actions
+	var s = getOwnership()
+	if(!s.hasOwner()):
+		return actions
+	# One obligation at a time, by priority (see OwnershipGame.ownerAction): a finished demand, a meeting they asked for, tonight's check-in. The ordinary options only show when none is waiting.
+	var action:Dictionary = OwnershipGameScript.ownerAction()
+	if(action["id"] != ""):
+		if(action["ok"]):
+			actions.append([str(action["label"]), str(action["tooltip"]), str(action["id"]), []])
+		else:
+			actions.append([str(action["label"]), str(action["tooltip"])])
+	actions.append(["Ownership terms", "What kind of owner this is, and how you stand", "sbxTerms", []])
+	return actions
+
+# True while the player has a finished demand to report: talking to the owner then offers the report straight away (see ApproachOrTalk), whatever else the owner wanted.
+func ownerHasCompletedDemand() -> bool:
+	return isMainReady() && getOwnership().hasOwner() && getOwnership().hasDemand() && getOwnership().demand()["state"] == "ready"
+
+func doOwnerTalkAction(event, actionID:String) -> bool:
+	match(actionID):
+		"sbxCheckin":
+			event.runEvent("", "SandboxOwnerOps", ["checkin"])
+		"sbxDemand":
+			if(getOwnership().hasMeeting() && str(getOwnership().meeting()["purpose"]) == "demand"):
+				var _heard:bool = getOwnership().finishMeeting() # hearing about the job is that meeting
+			event.runEvent("", "SandboxOwnerOps", ["demand"])
+		"sbxHandover":
+			event.runEvent("", "SandboxOwnerOps", ["handover"])
+		"sbxReportDemand":
+			var ok:bool = OwnershipGameScript.demandReportIn()
+			GM.main.addMessage("You report in. " + ("They take note of it." if ok else "It is not the time they asked for."))
+		"sbxMeeting":
+			event.runEvent("", "SandboxOwnerOps", ["meeting"])
+		"sbxPregnancy":
+			event.runEvent("", "SandboxOwnerOps", ["pregnancy"])
+		"sbxTerms":
+			event.runEvent("", "SandboxOwnerOps", ["terms"])
+		_:
+			return false
+	return true
+
+# The owner's own approach: a warning or a demand to deliver, as an owner event (BDCC walks the owner up to the player with its own goal).
+func getOwnerApproachEvent() -> Array:
+	if(ownerWantsToSeePlayer()):
+		return ["SandboxOwnerOps", ["approach"]]
+	return []
+
+# The ordinary price of the buyout (BDCC's own "Ask freedom" price is far out of reach, so it asks the module).
+func getBuyoutCost() -> int:
+	if(!isMainReady() || !getOwnership().hasOwner()):
+		return 0
+	for route in OwnershipGameScript.releaseRoutes():
+		if(route["id"] == "buyout"):
+			return int(route["cost"])
+	return 0
+
+# What the Side Tasks list shows for ownership: kind is "checkin", "demand" or "slave". {"visible", "title", "lines"}.
+func getOwnershipJournal(kind:String) -> Dictionary:
+	return OwnershipGameScript.journalView(kind)
+
+# Whether the player can open this slave's menu where they stand (the slave is in the same room and free).
+func isSlaveWithPlayer(characterID) -> bool:
+	if(!isMainReady() || GM.main.IS == null):
+		return false
+	var pawn = GM.main.IS.getPawn(characterID)
+	return pawn != null && pawn.getLocation() == GM.pc.getLocation()
+
+# True: this module runs escapes (always warned, never a silent roll), so BDCC's own random escape event stays quiet.
+func handlesSlaveEscapes() -> bool:
+	return true
+
+func ownerWantsToSeePlayerFor(characterID) -> bool:
+	return isMainReady() && getOwnership().isOwner(characterID) && ownerWantsToSeePlayer()
+
+# Whether the player may ask this character to look after them: {"show", "ok", "reason"} (see OwnershipGame.canAskProtection).
+func getProtectionOffer(npcID) -> Dictionary:
+	if(!isMainReady()):
+		return {"show": false, "ok": false, "reason": ""}
+	return OwnershipGameScript.canAskProtection(str(npcID))
+
+# Enslaving ends the interactions the pawn has with other characters (the one that enslaved them), and nothing else: the pawn is not deleted, moved or re-created, and its own routine goes on.
+func endEnslavingInteractions(characterID) -> void:
+	if(!isMainReady() || GM.main.IS == null):
+		return
+	for interaction in GM.main.IS.interactions.duplicate():
+		if(interaction.id != "AloneInteraction" && interaction.getInvolvedPawnIDs().has(characterID)):
+			GM.main.IS.stopInteraction(interaction)
+
+# The owner's visit: false (and a retry delay, half an hour) while something stops them from walking to the player. Nothing is lost by waiting: the pending business stays pending.
+const APPROACH_RETRY_SECONDS = 1800
+func ownerMayApproach(characterID) -> bool:
+	if(!isMainReady() || !keepsPrisonersPersistent()):
+		return true
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	var now:int = OwnershipGameScript.clockNow()
+	if(int(extender.approachRetry.get(characterID, -1000000)) > now):
+		return false
+	if(OwnershipGameScript.ownerApproachBlock(characterID) != ""):
+		extender.approachRetry[characterID] = now + APPROACH_RETRY_SECONDS
+		return false
+	return true
+
+# The owner takes part in an event only where they physically stand. A missing pawn is restored by the population system (its saved place, else its routine), never next to the player.
+func restoreOwnerPawn(characterID):
+	if(GM.main.IS.hasPawn(characterID)):
+		return GM.main.IS.getPawn(characterID)
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	var _tick = PopulationScript.tick(self, extender.director, true)
+	if(GM.main.IS.hasPawn(characterID)):
+		return GM.main.IS.getPawn(characterID)
+	var home:String = homeRoomOf(characterID)
+	if(home != "" && GM.world != null && GM.world.hasRoomID(home)):
+		return PopulationScript.spawnAt(GM.main.IS, characterID, home)
+	return null
+
+func ownerMayStartEvent(characterID) -> bool:
+	if(!isMainReady() || !keepsPrisonersPersistent()):
+		return true
+	if(!GM.main.RS.hasSpecialRelationshipID(characterID, "SoftSlavery")):
+		return false # an owner event only runs for the player's actual owner (a failed claim, for one, has none)
+	var pawn = restoreOwnerPawn(characterID)
+	if(pawn != null && pawn.getLocation() == GM.pc.getLocation()):
+		return true
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	extender.approachRetry[characterID] = OwnershipGameScript.clockNow() + APPROACH_RETRY_SECONDS
+	return false
+
+# A character was just enslaved: the pawn stays exactly where it is, the module only picks the new slave up (a role, a place in the plans), nothing is respawned or moved.
+func onSlaveEnslaved(characterID, hadQuest:bool = false) -> void:
+	if(!isMainReady()):
+		return
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	var noted:Array = extender.enslaveRoute.get(characterID, ["", 0])
+	var _gone:bool = extender.enslaveRoute.erase(characterID)
+	var route:String = str(noted[0]) if OwnershipGameScript.clockNow() - int(noted[1]) <= 3600 else "" # (a route noted long ago was abandoned)
+	OwnershipGameScript.onEnslaved(characterID, hadQuest, route)
+	refreshMapBadges()
+
+# The player's new owner (or protector) has just been recorded by BDCC: set up the module's record (unless the voluntary route is doing it itself), give a grace period, show the terms.
+func onOwnerStarted(characterID) -> void:
+	if(!isMainReady()):
+		return
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	OwnershipGameScript.onOwnerBegan(characterID, extender.startingVoluntary)
+
+# Why the player cannot give instructions to this slave right now ("" when they can): only real physical blockers, never the slave's mood for chat.
+func getInstructionsBlock(characterID) -> String:
+	if(!isMainReady()):
+		return "Not now."
+	return OwnershipGameScript.instructionsBlock(characterID)
+
+# The gate every way of becoming the owner passes through (RelationshipSystem.startSpecialRelantionship): false while somebody else is the owner and has not lost the claim.
+func mayStartOwner(characterID) -> bool:
+	return OwnershipGameScript.mayStartOwner(characterID) if isMainReady() else true
+
+func hasOtherOwner(characterID) -> bool:
+	return isMainReady() && OwnershipGameScript.hasOtherOwner(characterID)
+
+# The owner announced they will approach today (BDCC's own notice, NpcOwnerBase.onNewDay): a real pending meeting from now on.
+func onOwnerMeetingDay(characterID) -> void:
+	if(isMainReady()):
+		OwnershipGameScript.onOwnerMeetingDay(characterID)
+
+func getOwnerStartedText(characterID) -> String:
+	return OwnershipGameScript.ownerStartedText(characterID)
+
+# How the player is about to enslave somebody, told by the scene that does it ("free": the talk option, "kidnap": the kidnap scene); read once by onSlaveEnslaved.
+func noteEnslaveRoute(characterID, route:String) -> void:
+	var extender = GlobalRegistry.getGameExtender(ExtenderScript.EXTENDER_ID)
+	if(route == "kidnap" && extender.enslaveRoute.has(characterID)):
+		return # the talk option leads into the kidnap scene: it stays "free"
+	extender.enslaveRoute[characterID] = [route, OwnershipGameScript.clockNow()]
+
+# The slave in front of the player is taken along when a vanilla scene moves the player to a fixed spot (stocks, slutwall). Never moves a slave who is not in the player's room.
+func slaveFollowsPlayer(characterID, room:String) -> void:
+	if(isSlaveWithPlayer(characterID)):
+		GM.main.IS.getPawn(characterID).setLocation(room)
+
+# Walkies: the slave on the leash is always in the room the player is in.
+func slaveWalksWithPlayer(characterID) -> void:
+	if(isMainReady() && GM.main.IS != null && GM.main.IS.hasPawn(characterID)):
+		GM.main.IS.getPawn(characterID).setLocation(GM.pc.getLocation())
+
+func getSlaveStatusText(characterID) -> String:
+	return OwnershipGameScript.slaveStatusText(characterID)
+
+func isOwnedSlave(characterID) -> bool:
+	if(!isMainReady()):
+		return false
+	var theChar = GM.main.getCharacter(characterID)
+	return theChar != null && theChar.isSlaveToPlayer()

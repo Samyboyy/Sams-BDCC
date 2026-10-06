@@ -196,10 +196,10 @@ func jobTests():
 	# Save and sanitise
 	var t = StateScript.new()
 	t.loadData(JSON.parse(JSON.print(s.saveData())).result)
-	check(same(t.npc_jobs, s.npc_jobs) and t.schema_version == 8, "jobs survive save and load exactly")
+	check(same(t.npc_jobs, s.npc_jobs) and t.schema_version == 9, "jobs survive save and load exactly")
 	var old = StateScript.new()
 	old.loadData({"schema_version": 6})
-	check(same(old.npc_jobs, JobsScript.defaults()) and same(old.workplace, EventsScript.defaults()) and old.schema_version == 8, "a schema 6 save loads with no NPC jobs and no workplace history")
+	check(same(old.npc_jobs, JobsScript.defaults()) and same(old.workplace, EventsScript.defaults()) and old.schema_version == 9, "a schema 6 save loads with no NPC jobs and no workplace history")
 	var dirty = JobsScript.sanitize({"jobs": {"a": {"job": "mining", "since": "x", "moves": -4}, "b": {"job": "pirate"}, "": {"job": "mining"}, "pc": {"job": "mining"}, "c": "bad", "d": {"job": "laundry", "since": 3.7, "moves": 2.2}}, "known": {"a": true, "b": "yes", "e": true, "": true}})
 	check(dirty["jobs"].keys() == ["a", "d"] and dirty["jobs"]["a"]["since"] == 0 and dirty["jobs"]["a"]["moves"] == 0 and dirty["jobs"]["d"]["since"] == 4 and dirty["known"].has("a") and dirty["known"].has("e") and !dirty["known"].has("b") and dirty["known"].size() == 2, "damaged job data is repaired: " + JSON.print(dirty))
 	var overfull = {"jobs": {}}

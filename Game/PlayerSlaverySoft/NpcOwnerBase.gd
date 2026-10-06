@@ -215,11 +215,17 @@ func setPCName(_newName:String):
 	pcName = _newName
 
 func shouldOwnerApproachPC() -> bool:
-	return GM.main.getDays() >= nextApproachDay
+	if(GM.main.getDays() >= nextApproachDay):
+		return true
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule") # the module's owner has a warning or a demand to deliver in person
+	return sandboxModule != null && sandboxModule.ownerWantsToSeePlayerFor(charID)
 
 #[id, args]
 func getApproachEvent() -> Array:
 	#shouldAppoach = false
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && sandboxModule.ownerWantsToSeePlayerFor(charID)):
+		return sandboxModule.getOwnerApproachEvent()
 	return ["Approach", [true]]
 
 func canMeetThroughRelationshipMenu() -> bool:
@@ -260,7 +266,11 @@ func onNewDay():
 			punishAmount -= 1
 	
 	if(GM.main.getDays() == nextApproachDay):
-		GM.main.addMessage(getOwnerName()+", your owner, wants to approach you today.")
+		var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+		if(sandboxModule != null):
+			sandboxModule.onOwnerMeetingDay(charID) # a real pending meeting: told once, shown on the owner and the Ownership page, kept until it happens
+		else:
+			GM.main.addMessage(getOwnerName()+", your owner, wants to approach you today.")
 	
 	if(skipPunishCooldown > 0):
 		skipPunishCooldown -= 1
@@ -510,6 +520,13 @@ func getTalkActions(_event) -> Array:
 		result.append(talkAction("Ask sex", "Ask your owner to fuck you!", "askSex"))
 	if(getLevel() >= 3):
 		result.append(talkAction("Change name", "Ask your owner to change how they call you", "changeName"))
+
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule") # check-ins, demands, terms and the ways out (the module's own rules)
+	if(sandboxModule != null):
+		for entryIndex in range(result.size() - 1, -1, -1):
+			if(result[entryIndex].size() > 2 && result[entryIndex][2] == "askFreedom"):
+				result.remove(entryIndex) # the module's "Ownership terms" replaces it: BDCC's price is out of reach
+		result.append_array(sandboxModule.getOwnerTalkActions(self))
 	
 	if(hasOwnerLock()):
 		if(!didInteractWithToday()):
@@ -520,6 +537,9 @@ func getTalkActions(_event) -> Array:
 	return result
 
 func doTalkAction(_event, _actionID:String, _args:Array):
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && sandboxModule.doOwnerTalkAction(_event, _actionID)):
+		return
 	if(_actionID == "changeName"):
 		_event.runEvent("", "ChangeSlaveName")
 	if(_actionID == "askFreedom"):
@@ -547,6 +567,9 @@ func getFullFreedomPrice() -> int:
 	return freedomPrice
 
 func calcFreedomPrice() -> int:
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && sandboxModule.getBuyoutCost() > 0):
+		return sandboxModule.getBuyoutCost() # the module's price: several days of work, not hundreds of credits
 	if(getLevel() >= getMaxLevel() && getInfluence() >= 1.0):
 		return 0 # Free at max level and 100% influence
 	

@@ -433,7 +433,7 @@ func _init():
 	var saved = JSON.parse(JSON.print(s.saveData())).result
 	var t = StateScript.new()
 	t.loadData(saved)
-	check(JSON.print(t.security) == JSON.print(s.security) and t.schema_version == StateScript.CURRENT_SCHEMA_VERSION and StateScript.CURRENT_SCHEMA_VERSION == 8, "security survives a JSON round trip at schema 5")
+	check(JSON.print(t.security) == JSON.print(s.security) and t.schema_version == StateScript.CURRENT_SCHEMA_VERSION and StateScript.CURRENT_SCHEMA_VERSION == 9, "security survives a JSON round trip at schema 5")
 	check(typeof(t.security["search_stamp"]) == TYPE_INT and typeof(t.security["contraband_count"]) == TYPE_INT and typeof(t.security["attention"]) == TYPE_REAL and t.security["active"] == true, "stamps and counts load back as integers, the flag as a bool")
 	var alias = s.saveData()
 	alias["security"]["attention"] = 99.0
@@ -462,10 +462,10 @@ func _init():
 	check(stuckSec.dropStaleEnforcement(stuckNow, true) and !stuckSec.isActive(), "and neither can an active flag")
 	var old = StateScript.new()
 	old.loadData({"schema_version": 4, "security": {"attention": 80}, "reputation": {"combat": 5.0, "defiance": 0.0}})
-	check(old.schema_version == 8 and old.security["attention"] == 0.0 and JSON.print(old.security) == JSON.print(SecurityScript.defaults()), "a version 4 save starts at attention 0 with no cooldowns, even with a stray field")
+	check(old.schema_version == 9 and old.security["attention"] == 0.0 and JSON.print(old.security) == JSON.print(SecurityScript.defaults()), "a version 4 save starts at attention 0 with no cooldowns, even with a stray field")
 	check(old.reputation["combat"] == 5.0, "and keeps what it had")
 	old.loadData({"schema_version": 1})
-	check(old.schema_version == 8 and old.security["attention"] == 0.0, "a version 1 save migrates all the way")
+	check(old.schema_version == 9 and old.security["attention"] == 0.0, "a version 1 save migrates all the way")
 	old.loadData({"schema_version": 99, "security": {"attention": 33}})
 	check(old.schema_version == 99, "a newer save keeps its version")
 	old.loadData({"schema_version": 5, "security": "junk"})

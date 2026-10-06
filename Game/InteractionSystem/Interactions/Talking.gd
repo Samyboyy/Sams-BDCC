@@ -68,6 +68,11 @@ func sandboxChatOutcome(_chat:Dictionary) -> bool:
 func init_text():
 	var theStarter:BaseCharacter = getRoleChar("starter")
 	var theReacter:BaseCharacter = getRoleChar("reacter")
+	var sandboxOwner = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxOwner != null && getRolePawn("starter").isPlayer() && getRolePawn("reacter").getSpecialRelationship() != null && getRolePawn("reacter").getSpecialRelationship().id == "SoftSlavery"):
+		saynn(sandboxOwner.getOwnerStartedText(getRoleID("reacter"))) # they have just become the player's owner, in the middle of this talk: end it with one clear way on (owners talk through their own events)
+		addAction("owner_continue", "Continue", "See what happens next..", "default", 1.0, 30, {})
+		return
 	
 	if(!notFirst):
 		saynn("{starter.name} approaches {reacter.you}.")
@@ -109,6 +114,19 @@ func init_text():
 		if(getRolePawn("reacter").canSocial() && !isNemesisTo("reacter", "starter")):
 			addAction("ask_job", "Their work?", "Ask what work they do", "default", 0.0, 30, {})
 			addAction("gangs", "Gangs", "Talk about gangs: where they meet, joining, jobs", "default", 0.0, 30, {})
+			var sandboxOwnership = GlobalRegistry.getModule("SandboxOverhaulModule")
+			var protectionOffer:Dictionary = sandboxOwnership.getProtectionOffer(getRoleID("reacter"))
+			if(protectionOffer["show"]):
+				if(protectionOffer["ok"]):
+					addAction("ask_protection", "Ask for protection", "Ask them to look after you, on their terms. You are shown the terms first and nothing happens until you agree.", "default", 0.0, 30, {})
+				else:
+					addDisabledAction("Ask for protection", protectionOffer["reason"])
+	if(sandboxOwner != null && getRolePawn("starter").isPlayer() && !getRolePawn("reacter").isPlayer() && sandboxOwner.isOwnedSlave(getRoleID("reacter"))):
+		var instructionsBlock:String = sandboxOwner.getInstructionsBlock(getRoleID("reacter")) # your slave: never hidden by their mood for chatting, only by real physical blockers
+		if(instructionsBlock == ""):
+			addAction("slave_care", "Give instructions", "Their role, where they sleep, rewards, release: how they are holding up", "default", 0.0, 30, {})
+		else:
+			addDisabledAction("Give instructions", instructionsBlock)
 	if(getRolePawn("reacter").canGrabAndFuck() && roleCanStartSex("starter")):
 		addAction("grab_and_fuck", "Grab&Fuck", "They have so many restraints that you can just fuck them..", "sexUse", 5.0, 60, {})
 	addAction("attack", "Attack", "Make them regret it!", "attack", 1.0 if (didAmount <= 0 || gotDenied) else 0.1, 30, {})
@@ -177,6 +195,9 @@ func init_text():
 	triggerTalkRunEvents("reacter")
 
 func init_do(_id:String, _args:Dictionary, _context:Dictionary):
+	if(_id == "owner_continue"):
+		stopMe()
+		return
 	if(_id == "chat"):
 		didAmount += 1
 		gotDenied = false
@@ -187,6 +208,10 @@ func init_do(_id:String, _args:Dictionary, _context:Dictionary):
 		setState("about_to_flirt", "starter")
 	if(_id == "gangs"):
 		runScene("GangScene", [getRoleID("reacter")])
+	if(_id == "ask_protection"):
+		runScene("OwnershipScene", ["protection", getRoleID("reacter")])
+	if(_id == "slave_care"):
+		runScene("SlaveInstructionsScene", [getRoleID("reacter")])
 	if(_id == "ask_job"):
 		var _jobLearned:bool = GlobalRegistry.getModule("SandboxOverhaulModule").learnNpcJob(getRoleID("reacter"))
 		setState("asked_job", "starter")
@@ -219,6 +244,8 @@ func init_do(_id:String, _args:Dictionary, _context:Dictionary):
 	if(_id == "leave"):
 		setState("about_to_leave", "starter")
 	if(_id == "enslave_free"):
+		if(GlobalRegistry.getModule("SandboxOverhaulModule") != null):
+			GlobalRegistry.getModule("SandboxOverhaulModule").noteEnslaveRoute(getRoleID("reacter"), "free")
 		setState("about_to_kidnap", "starter")
 	if(_id == "enslave_npcOwner"):
 		setState("npcEnslaveOffer", "reacter")
@@ -286,6 +313,9 @@ func npcEnslaveOfferFromPC_yes_do(_id:String, _args:Dictionary, _context:Diction
 	if(_id == "continue"):
 		var theCharID:String = getRoleID("reacter")
 		stopMe()
+		if(GlobalRegistry.getModule("SandboxOverhaulModule") != null && GlobalRegistry.getModule("SandboxOverhaulModule").hasOtherOwner(theCharID)):
+			runScene("OwnershipDisputeScene", [theCharID]) # the player already has an owner: a claim is a dispute, never a second owner
+			return
 		GM.main.RS.startSpecialRelantionship("SoftSlavery", theCharID)
 		runScene("NpcOwnerEventRunnerScene", [theCharID, "Intro", ["willing"]])
 		pass
@@ -337,6 +367,9 @@ func playerAgreedToBeEnslaved_do(_id:String, _args:Dictionary, _context:Dictiona
 	if(_id == "continue"):
 		var theCharID:String = getRoleID("starter")
 		stopMe()
+		if(GlobalRegistry.getModule("SandboxOverhaulModule") != null && GlobalRegistry.getModule("SandboxOverhaulModule").hasOtherOwner(theCharID)):
+			runScene("OwnershipDisputeScene", [theCharID])
+			return
 		GM.main.RS.startSpecialRelantionship("SoftSlavery", theCharID)
 		runScene("NpcOwnerEventRunnerScene", [theCharID, "Intro", ["willing"]])
 

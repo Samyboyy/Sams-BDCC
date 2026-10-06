@@ -253,3 +253,191 @@ simulation visible. Nothing here runs per frame: the director works in ten-minut
   and one system line. Accepted assignments are in the quest log. Beating the target counts in every way a fight can end for the player's benefit, including the NPC giving up before the fight; the player surrendering, walking away, an unrelated
   NPC winning, or an unfinished fight do not count. Reporting a finished introductory job pays once and makes the player eligible; the leader then explains the gang's three commitments and the player agrees or says "Not yet" (the job is never
   repeated). Joining gets the leader's welcome, then the facts.
+
+
+## Ownership and slavery (Milestone 8)
+
+### What BDCC already had, and what was reused
+
+- **The player owned by an NPC** is `SoftSlavery` (a special relationship stored by the relationship system, keyed by the owner's character ID, holding an `NpcOwnerBase` with level, influence, tasks, punishment points, the keyholder
+  lock and BDCC's own approach days). It starts from the "Ask to become slave" and "Offer to enslave" talks, nemesis ambushes and debug scenes, and ends through "Ask freedom" (a price of 500 to 2000 credits scaled by influence),
+  attacking the owner (each win lowers influence, zero ends it) or reaching the top level. Owners approach the player with their own goal and run owner events (approach, punishments, sex, talk). This was kept as it is.
+- **The player owning NPCs** is `NpcSlave` on the character, the `Slaves` character pool, `NpcSlaveryModule` (enslave, free, slave space), the slave menu (`SlavesCheckScene`, `SlaveTalkScene`), `SlaveActionBase` actions, slave activities (prostitution,
+  walkies, stocks, slutwall, milking), random slave events (including a silent escape), and obedience, broken spirit, love, despair, trust, fear and unhappiness values on the slave. This was kept and used.
+- **What was weak:** a slave left the world when enslaved (the pawn was deleted and the character moved to an abstract pool, back only inside an activity); an owner was treated by the module as "kept elsewhere" and was never directed; an owned
+  player was blocked from jobs; BDCC's freedom price was out of reach; a slave could vanish on a silent random roll; nothing physically tied an owner to a cell or a time. Those are what changed. The slave stat system, the owner events,
+  the punishment events and the NPC slavery activities were not touched.
+
+### The player owned by an NPC
+
+- **Style:** from the owner's personality (mean, dominant/submissive, naive, level-based power): Lenient (a check-in about every third night, a demand about every four days, slow escalation, room to negotiate, light punishment, weak
+  protection), Controlling (every other night, every three days) or Harsh (every night, every two days, fast escalation, no room, heavy punishment, real protection). It never changes for a character and is shown with an explanation.
+- **Check-in:** the owner expects the player in the owner's own cell between 21:00 and 23:00 on the nights their style asks for (reminded once at 20:30; early from 20:30, late counts until 00:30). The owner walks to their cell from 20:15 as part of
+  their routine. In the cell the owner's talk menu offers "Report in", and the owner answers for early, on time or late. The obligation is a Side Tasks entry with the owner's cell, block and time, and learning it comes with it.
+  Excused with no warning: stocks, slutwall, unconsciousness, treatment, guard enforcement, recovering from a lost fight, an owner event, a hard slavery scene, the owner unavailable (captive, busy, absent, no cell), or no route to the cell.
+- **Demands:** one at a time, never closer than the style's gap (two days at the least), only in the daytime and only when possible right now: credits (3 to 6, never more than the player has), a plain item the player carries, contraband the
+  player carries (harsh owners only), a work shift (only with a job and an open shift), being at the owner's cell at a time, or beating a valid inmate (not lenient owners). They are told in person (the owner walks up, or the player
+  talks to them), can be agreed to, eased (halved payment, a day more, or an unsuitable task swapped for a small payment: depends on trust, respect, affection, style and recent compliance, no dice) or refused. Done once, rewarded once.
+- **Compliance and escalation:** no obedience number: recent fulfilled and missed days, warnings, the last consequence, grace, the demand. A miss is a warning first; piling up (style decides how fast) gives a demand for compensation,
+  then the game's own punishment event or a fight. All of it is delivered only when the owner meets the player. Answers: apologise, submit, pay, ask for easier terms, resist (fight or back down at the last moment, which is milder than
+  losing). Winning ends the consequence, makes the owner keep away for two days and fear the player, and counts towards release; ownership stays.
+- **Protection:** an owner's credibility (their power against the attacker, the attacker's fear of them, their gang's strength, having hit back before) shields the player, scaled by style, halved when they are not around, weakened by recent
+  fight losses. The multiplier is never below 0.35, and with gang protection, fear and reputation the whole attack interest is never below 0.1. The screen says Weak, Moderate or Strong with plain reasons. An owner standing in the room steps in
+  and fights the attacker; the owner remembers aggressors and may hunt one (once every four days, walking there, giving up after two failures or two recent losses).
+- **Volunteering:** "Ask for protection" appears for ordinary inmates only. Their answer comes from submissiveness, respect, affection, desire, ability to protect, fear and gang status. The terms (style, check-in frequency, demands,
+  protection, the minimum three days) are shown first and nothing happens until the player confirms twice.
+- **Ways out:** negotiated (after the term, with trust and respect or high affection; a last payment of 0, 5 or 10 credits by style), buyout (30 to 60 credits by style, relationship and protector; not within the term, not from an owner who
+  loathes the player), defiance (beat the owner on 2 separate days, 3 for a harsh one), a gang's help (standing 25 or more, a strong enough gang; costs standing, treasury and the owner's trust), or the owner letting go (afraid and beaten, or fond
+  after a long time). BDCC's own influence route still works.
+
+### The player owning NPCs
+
+- Slaves stay in their own cells as ordinary persistent inmates with a daily plan. Roles (one at a time, changed in person once a day): Free routine (trust slowly recovers), Earner (an afternoon post at the prostitution spots; 2 to 4
+  credits for a day really worked, credited once a day, collected in person, nothing when hurt, held or kept from the post; it wears trust down), Attendant (waits in the cell block's common hall in the morning and evening; helps if you are
+  attacked in the same room), Rest (stays in their cell by day; injuries and trust recover). "Ask them to report to your cell" is a one-evening duty given in person (see below).
+- How they feel is described from directed Trust, Respect, Fear and Affection (loyal, intimidated, resentful, defiant, recovering, uncertain) and nothing is stored. Defiant slaves refuse the hard duties, resentful ones refuse earning and reporting.
+- Escape is always telegraphed: neglected, unhappy slaves first get a warning (a message and a Side Tasks entry), the next day make a visible attempt for the exit, and only if nothing is done a day later get away, as ordinary inmates who remember it.
+  Answers in the slave menu: talk them round, warn them off, treat them better, stop them by force, or let them go. Releasing someone raises their trust and affection a lot.
+- Nothing is spent or earned twice: income is once per slave per day and survives save and load.
+
+### Saves
+
+Schema 9 adds `ownership` ({owner, slaves, last_release, tick_day}). A schema-8 save loads with an empty record; BDCC's own owner and slaves are picked up the next time the game runs with fresh schedules and no warnings, in their own cells.
+Malformed data is repaired on load, and characters that no longer exist are dropped.
+
+### Continuity and economy rules (correction pass)
+
+- Enslaving keeps the very same pawn, in its room, with its cell and routine. Escaping does the same in reverse: ownership is cleared and the inmate carries on from where they stood.
+- Nothing teleports a slave. Commands are given in person; "Ask them to report to your cell" is checked at once (held, badly hurt or no route: refused with the reason) and is a real walk in the evening (19:30 to 21:30). It ends exactly once: arrival, or a clean cancel with a message if they are held, badly hurt or cut off. Being busy only delays it.
+- Earners share customers. Per day: the first earner 2 to 4 credits, the second 1 to 3, every further one 1, 8 credits a day for all together. The day's count and total are saved (`earn_pool`), so loading never pays twice or resets the cap. Slave space is not capped by the game (it costs 30, then 10 per slave owned, per extra space), so the daily cap is what bounds income: at most 56 credits a week.
+- Loyal defenders help only when physically in the room, never while held, badly hurt or busy; attendants help unless defiant or resentful; exactly one helper steps in per attack.
+
+### Owner visits and the report order (final correction)
+
+- The owner walks to the player through real rooms, one step at a time, using BDCC's own approach goal. The event starts once, when they stand in the same room. If the player moves, the owner keeps following on foot.
+- If the owner is held by a gang, badly hurt, busy (being knocked out counts as busy) or cut off (no route), the visit is postponed without penalty and not weighed again for half an hour. A missing owner pawn is restored by the population system at its saved place (else where its routine has it), never beside the player.
+- Saving and loading mid-approach keeps the owner walking (pawns and their goals are saved); nothing starts twice. The retry delay is not saved, so a load just weighs the visit once more.
+- "Ask them to report to your cell": the player speaks to the slave in person (Slave, then the order). The order is for that evening, and the slave carries on with their ordinary day. From 19:30 to 21:30 they walk from wherever they are to the player's cell and the order ends on arrival. If they are held or badly hurt, it is cancelled with a message and no blame; if they are busy or knocked out it is only delayed and resumes if they are free inside the window, otherwise it lapses at the end of the day without blame.
+- Slave menus opened for a slave who is not in front of the player are informational (where they are, what they are doing) and offer no commands.
+
+### New slaves, nights, roles and how enslaving feels (manual-playtest correction)
+
+**The soft-lock.** An owner event scene that could not start (the owner is not in the room) had no buttons. The owner relationship could begin with the owner far away (console and debug conversions, which then run the owner's intro). Now: the scene says
+who they are and shows the terms with one Continue; a talk that was open ends with one Continue; the module records the owner at once and gives a day of grace before the first visit (never on the same frame); agreeing to "Ask for protection" ends on a
+screen with the terms and Continue. Friend or Nemesis ends with its own message and the Owner replaces it (one special relationship per character).
+
+**A new slave.** The same pawn, in the same room, with the same cell, marked *Awaiting instructions*. They do not take a free routine, wander off or choose a distant activity, and nobody starts planning to run in the first two days or while waiting. If the game's
+own kidnap scene brought them ("bring to your cell"), they walk to the player's cell on their own through real rooms and wait there. The player talks to them and chooses **Give instructions** (always available while they are here and able to answer: it does not depend
+on their mood for chat or flirting, on liking the player, or on any dice; only unconsciousness, being held, being busy elsewhere, or not being in the room blocks it):
+
+- Role, with what is expected: Free routine ("You may follow your ordinary prison routine. Report only when summoned."), Earner ("Work the afternoon prostitution locations and keep the agreed earnings for collection."), Attendant ("Stay around my cellblock
+  during your free periods and help me if trouble starts."), Rest ("Avoid duties and recover.").
+- Night arrangement: "Sleep in your own cell.", "Sleep in my cell each night." or "Keep your own cell and report only when ordered."
+- Confirmation: "Those are your instructions." or "I'll decide later." (they keep waiting; the Ownership screen says *Awaiting instructions*; it is never reopened on its own).
+
+They answer in character from Trust, Fear, Respect and Affection: a defiant slave refuses what they would not do. Later changes use the same screens, in person, once a day for the role, and start about half an hour later (no instant change of room).
+
+**Sleeping in the player's cell.** From 20:30 they walk over, through real rooms, and are there before ordinary bedtime where the walk allows. The activity reads "heading to your cell" and then "sleeping in your cell". They stay overnight and leave when their own plan has
+them wake. Their own cell stays theirs and reports them away. Held, knocked out, busy or cut-off slaves are excused and are never moved. It is separate from the one-off "Report to my cell".
+
+**How enslaving leaves them feeling** (applied once, recorded on the slave so a load never repeats it; one coloured message):
+
+| How | Trust | Affection | Respect | Fear | Desire |
+|---|---|---|---|---|---|
+| Forced (breaking quest) after a fight win | -25 | -12 | +4 | +22 | 0 |
+| Forced, no recent defeat | -25 | -12 | -6 | +22 | 0 |
+| Forced, they had surrendered (submission) | -12 | -4 | +1 | +12 | 0 |
+| Submission (the "Enslave!" talk option, not already warm) | -12 | -4 | +2 | +12 | 0 |
+| Voluntary (the talk option, already warm: affection 20+ and trust 15+) | +3 | +3 | +2 | 0 | 0 |
+| Unknown or debug conversion, every axis exactly neutral | -10 | -5 | -2 | +8 | 0 |
+| Unknown or debug conversion, existing feelings | unchanged | unchanged | unchanged | unchanged | 0 |
+
+BDCC offers no purchase or transfer of a slave to the player and no scripted slave story. If one is ever added it counts as unknown.
+
+**The map badge.** A purple "S" for somebody the player owns, after the relationship tag and the gang badge ("F S", "N G S", "G S"), tooltip "Your slave.". A gang's own slaves do not get it. It appears and goes the moment somebody is enslaved, freed or escapes.
+
+### Who would look after the player
+
+Before: a single score (30% dominance, 25% respect, 15% affection, 15% desire, 15% personal "ability", 10% trust) had to reach 0.25. "Ability" was fighting strength measured against a typical attacker plus the gang's strength, which almost nobody reached, so nearly
+everybody was "not able to protect anyone"; any submissive streak (over 0.2) printed "would rather be looked after"; strangers scored about 0.02 and always said no; gang leaders were judged by personal stats only; all the reasons were joined together.
+
+Now: capability and willingness are separate, and both must hold (`Ownership.protectorDecision`).
+
+- *Capability* (at least 0.35): how they rank among the inmates in strength (0 to 1), blended with their gang's strength (the leader leans on the gang more, 0.7 against 0.4), times 0.7 with a moderate injury and 0.3 with a severe one. Held people cannot.
+- *Willingness* (at least 0.40): 0.36, less 0.2 for each point of submissiveness, plus 0.30 respect, 0.20 trust, 0.15 affection and 0.10 desire (as fractions of 100), minus 0.4 if they fear the player and do not trust them, minus 0.6 for a hostile history, plus 0.30 for the
+  leader of the player's own gang (0.12 for a member), minus 0.5 if their gang is hostile to the player (0.3 if it is an enemy of the player's gang), minus 0.2 if the player's own gang is already strong. Only somebody strongly submissive (0.55 or more) refuses on temperament alone.
+- A refusal is one primary reason in their own words, at most one more, and a direction (build trust, earn respect, let them recover, improve gang standing, settle things). The terms (style, check-ins, demands, protection band, minimum term) are still shown before acceptance.
+
+**How to get a slave in BDCC** (shown on the Ownership screen while the player has none): buy room from Socket (the cell expansion, 30 credits, then 10 per slave you can already keep for each extra space); beat an inmate in a fight; press **Enslave!** (needs a collar, free
+arms and room) and choose the kind of slave; complete the breaking quest (tasks in the personality status effect; choking rerolls them); press **Kidnap!** after a defeat and take them to your cell; or, with high Alpha reputation, use the **Enslave!** talk option on a submissive inmate.
+Afterwards talk to them and choose Give instructions.
+
+### Coherence pass: bugs, rules and limits
+
+**Root causes**
+
+- *"!Error: npc character is not found to say text".* The protection refusal printed the candidate's reason inside `[say=npc]`. BDCC resolves the speaker of a `[say=...]` line through the scene on top of the stack (`resolveCustomCharacterName`), and the Ownership scene
+  did not define it. It now does (and shows the candidate). The test helper draws every screen with the scene on top of the stack and fails on any "!Error" text.
+- *Two owners.* Nothing checked for an existing owner: BDCC's own relationship system keys special relationships by character, so a second `SoftSlavery` for another character simply got added, while the module's single owner record only knew one.
+  Every route (the talk offers, the Nemesis ambush, debug and console conversions, old events) ends in `startSpecialRelantionship`, so the check is there.
+- *Duplicated terms.* The owner relationship notification repeated the whole terms paragraph that the acceptance panel shows. The notification is now the game's own one line; the terms are on the panel and on the Ownership page.
+- *Defeat tasks.* Gang jobs and owner demands each had their own entry points for "the player beat this person". They now share `Module.onPlayerBeatNpc`, called once per encounter by the fight aftermath (pain, lust, the target submitting) and by an NPC's surrender before the fight.
+  An encounter counts once however many times it is reported. It never counts when the player loses, submits or leaves, or when somebody else beats the target. The old tests reached the helper through `onNpcSurrender` and `onFightAftermath` directly; the new test drives
+  a real `GenericAttack` interaction (the same `doFightAftermath` the fight scene calls, and the real "surrender" action).
+- *Population.* BDCC's morning wave and spawner create a new character whenever nobody is free to pick one, and with a persistent prison nobody ever is: everything grew to the cap (45 inmates; staff at the pawn-limit shares, 18 guards, 11 nurses and 8 engineers at a limit of 90).
+  Sources: `InteractionSystem.spawnMorningWave` and `trySpawnPawn` (through `PawnTypeBase.generateCharacterID`), and events and scenes that call `NpcFinder.grabNpcIDFromPoolOrGenerate` (these only create below a pool of about 25).
+  Stored characters live in pools; every inmate and every staff member in a pool is a persistent pawn; static story characters are not in these pools and are never touched; generated characters are the ones above.
+
+**One owner, and rival claims.** There is one authoritative owner: the one in the module's record if it is valid, otherwise (an old save with several) the owner with the lowest character id; the others lose the status only, with one message. A claim on a player who is already owned is a dispute:
+the owner may contest it only if they are free, awake, not badly hurt, not held and able to get there (otherwise it is postponed with no cooldown used); the claimant must be able too; a claimant who is much weaker or timid backs down; a lenient owner gives way to somebody stronger;
+otherwise it is decided with BDCC's own quick-fight rule (strength score squared, with the gang behind each, injuries, a bonus for a harsh or controlling owner defending their claim and for the side the player backs). The loser is hurt (a minor injury) and the fight is recorded once for gangs and the owner's record.
+Only the winner is the owner afterwards. At most one dispute every two days, and the same claimant not again for three. The talk offers open a scene where the player can back the owner, back the claimant or stay out of it; debug and ambush routes resolve it without a side.
+
+**The owner coming to help.** When the player is attacked and nobody who is there helps, a free, awake, not badly hurt, not held owner who is within six rooms and can walk to the player may come running: at most once every two days, with a chance from how credible they are
+(strength, fear of them, their gang) and their style (harsh most, controlling a little less, lenient least). They are put in the room for the incident (one message; never duplicated), the original attack is replaced by their fight (so combat, injuries and reputation count once), and their own routine walks them
+back afterwards. If they cannot come, the retaliation they may plan later still applies. The Ownership page says whether this is ready, recovering (and until when) or unavailable (and why), never a number.
+
+**The yellow Q.** Derived from live task state, never stored: the target of an accepted gang job (defeat, capture, rescue and the rival to beat), the recipient of a courier job, the gang leader to hand somebody to, deliver to or report back to, the owner to hand a demand to, report back to or check in with,
+the target of an owner's defeat demand, and a slave who is about to run. Tooltip: "Task target: Defeat Alfred" or "Task contact: Report to Simone". Tracked module quests are exactly these (their Side Tasks entries read the same state). The base game's own quests have no generic target API, so they get no Q.
+
+**Population.** Inmates arrive on a schedule (`PrisonSchedule.inmateLimit`): 10 on the first day, 12 on day 1, 21 on day 14, 25 by day 30, never above the soft target of 26 and never above the hard cap of 30; a prison that already has more admits nobody and loses nobody.
+Dynamic staff are capped at 10 guards, 5 nurses and 5 engineers (the share of the pawn limit still applies below that: 6, 3 and 3 at the default limit of 30). Events that ask for a new character get an existing one once the pools are full.
+
+**What Milestone 9 can use (nothing added here).** Prison-wide Combat Reputation and Defiance are two numbers on `state.reputation`, changed through `CombatConsequences.addRep` and displayed by the Me screen and the conversation summary; they would become per-character in a `npc_profiles` entry (already saved,
+already reserved for per-NPC data). Every fight that involves the player reaches `Module.onFightAftermath(interaction, wonID, lostID, result)` and every fight between two others reaches `OwnershipGame.onNpcFightResult`: both are the places to record results for any NPC.
+Talking shows the feelings line from `Module.getFeelingsSummary` and the Look around screen's fight actions come from `Module.getFightInterruptActions`: both are where a public reputation line would go. For "easy target" the inputs already exist: `Injuries.highestSeverity` and `attackInterestMultiplier`,
+the directed Fear axis, `GangGame.power` and the quick-fight strength score (`calculatePowerScore`), and recent victimisation can come from the same aftermath hook. `getAttackMultiplier` is where the player-as-target version already combines combat reputation, fear, injuries, the gang's protection and the owner's.
+
+**Nudity audit.** The guards' nudity warning and fine (Milestone 6) is still connected: `onSecurityTick` runs every ten in-game minutes, evaluates every free guard standing in the player's room (`evaluateGuardEncounter`), and starts `GuardEnforcement`. The measured frequency is in the test output.
+
+### Ownership coherence pass
+
+- **Reporting a completed demand** works at any time of day ("Report completed demand" in the owner's talk menu; the owner also carries a Q while it is ready). It is separate from the nightly check-in. Reward, once: Trust +3, Respect +2, Affection +1 (+1 Respect for beating somebody or carrying contraband). No Combat Reputation or Defiance change: that belongs to Milestone 9.
+- **Protection:** once per in-game day, from anywhere in the prison, with no roll. Only hard blockers stop it (held, unconscious, severely injured, not around, in a fight or scene of their own); then nothing is used up and the Ownership screen says why. The owner arrives (announced, in the same room, never a second pawn), fights through the existing fight flow and may lose. Deterrence (`Module.getAttackMultiplier`) scales with the owner's credibility, but a strong gang behind the attacker or somebody who hates the owner is much less put off: it is never immunity. The screen says "Protection ready", "Protection used today" or "Protection unavailable: reason".
+- **Help acknowledgement** (`HelpRequests.acknowledge`) is one shared, exactly-once thank-you after a joined fight is decided: owner Trust +4, Respect +4, Affection +1 and a minor warning forgiven (or the next demand a day later); friend Trust +3, Affection +2, Respect +1; gangmate Trust +2, Respect +2, standing +2; leader Trust +2, Respect +3, standing +3; anybody else Trust +1, Respect +1; lost after trying Trust +1. One full reward per person per day.
+- **Meetings:** "My owner wants to meet today" is a pending meeting record on the owner (`meeting`: day, purpose, told). A hard blocker postpones it to the next day with one notice; the owner has until 20:00 to walk to the player, after which they find the player directly (a deliberate abstraction, once); it ends when the owner event starts; saved and loaded.
+- **Evening at the owner's:** a valid evening check-in leads to the owner requiring, inviting or allowing a stay (by style; deterministic from day and owner). Staying uses the game's own sleep (`startNewDay` and `afterSleepingInBed`), once. On a stay the night may turn intimate, at most once in two nights, with a chance from style, lust, affection and trust: the owner asks (declining costs nothing), demands (can be talked out of it; refusing costs a little affection, never a Nemesis) or forces. The scene is the existing sex engine and the aftermath is the existing CONSENSUAL / COERCED / FORCED path (`Module.applySexConsent`).
+- **Rescue:** after the player loses a fight to somebody who is not staff and is left restrained, the owner (same rules as protection, consuming the day's protection only when they actually come) arrives once and takes the restraints off with the game's own inventory calls. A harsh owner asks for something first (the player can say "not now" and is freed anyway). Guards' restraints are the prison's business and are never removed.
+- **Milestone 9 hooks (nothing built):** `Module.onFightAftermath` and `HelpRequests.acknowledge` (one place where public standing, witnesses and gossip can read a result); `OwnershipGame.protectionFacts` (attacker gang and hostility, where a reputation read would add "who dislikes this owner"); `Ownership.pc_defeat` (a recent hostile defeat, where opportunistic targeting of a weakened player would start). Inmates do not pick on a restrained player yet.
+
+### Owner actions, meetings and check-in outcomes
+
+- **One ownership action at a time.** The two "Report in" entries came from the nightly check-in and from a "be at my cell" task (`type "report"`), both added by `Module.getOwnerTalkActions` (the Q marks had the same pair). Now the menu shows one, in this order: 1. "Report completed demand" (or "Hand it over" for credits, items and contraband), 2. "Meet with owner" (a scheduled meeting), 3. "Report in for the night" (a check-in; the report task is settled by the same report; "Report as ordered" only when there is no check-in), 4. the ordinary options ("Hear their demand"). When one is done the conversation returns to the owner menu and the next one appears.
+- **Meeting purpose** is chosen once when the meeting is created (`Ownership.choosePurpose`) and saved: something owed (warning, compensation, punishment, by the level of the waiting warning); a finished demand to discuss (review); a new demand; a reward for notable compliance (a hard demand or three good days, at most once in three days); intimacy (style, lust and relationship, deterministic); otherwise ordinary possessive attention. The notices say only "wants to speak with you", "expects you for a warning", "has promised you a reward" and so on. The meeting is held when the owner's event opens (never by a different owner event) and ends in real dialogue: a demand to answer, the finished demand's report, the existing confrontation, a few credits with praise, an asked, demanded or forced night, or a conversation with a small style-shaped change.
+- **A check-in's outcome** is chosen once when the report is accepted and stored in the check-in record: 1. an outstanding warning (the existing confrontation, then the evening carries on); 2. praise for notable compliance (Respect +1, Affection +1, a minor warning forgiven or the next demand a day later; never the task's own reward again); 3. intimacy (ask, demand or force, as before); 4. otherwise the stay, which the owner requires, invites or allows by style.
+- **The stay** runs the game's own sleep (`startNewDay`, `afterSleepingInBed`, one autosave inside `startNewDay`) and then the vanilla `NpcOwnerSleepTogetherScene`: the Sleeping animation with the owner. It is only reached through the check-in (or a meeting that leads to it), never from reporting a task.
+
+### Job offers, missed nights, rewards, pregnancy and Desire (manual-test correction)
+
+- **A job offer is a real pending offer.** An owner's offered demand (and the gang leader's offered job) is saved, announced once in natural wording ("X has something they want you to do"), a Side Task ("X has a task for you"), a yellow Q on the owner ("Hear about the job from X") and the one action "Hear about the job" in the talk menu, whatever the owner's mood. The owner is already in the room: they start the conversation on the next tick. Elsewhere they walk to the player (BDCC's approach goal); after 20:00 the existing "finds you directly" fallback applies; a hard blocker postpones it once with one message; a lapsed offer takes its promise with it. The conversation explains objective, reward, time limit and the consequence, and only agreeing makes an active demand (refusing is a refusal: a warning is noted). The gang leader's offer has no walk (leaders stay at their hangout) but has the Side Task, the Q, the natural wording and opens straight away when you talk to them about gangs.
+- **Missed nights.** Root cause: the check-in of the day that had just ended was replaced by tonight's new record (`startCheckin`) before it was judged (`closeCheckin`), so sleeping through a night cleared it unseen. The tick now judges the old record first, then counts required nights the clock jumped over (each once; the latest three are held against the player), then starts tonight's. One concise message; the existing escalation follows (harsh now starts at compensation, controlling and lenient at a warning).
+- **Completion rewards.** The reward was stored owner -> player all along (Talking and the Encounters list read the same pair). What the player saw was nothing: no message was shown, and the report screen applied the reward inside the state's draw function, so drawing the screen a second time showed "nothing to hand over" instead of the owner's answer. The report is now applied once, remembered by the event (saved), and shown as one combined coloured message ("X's feelings changed: Trust +3, Respect +2, Affection +1"); Fear and Desire do not change.
+- **Pregnancy.** Reused: `isPregnant`, `isVisiblyPregnant`, `isReadyToGiveBirth` and the eggs' `getFatherID` for the player, and the vanilla `NurseryTalkScene` (the nurse; birth is `GM.pc.giveBirth()` there). The owner reacts once to a visible pregnancy ("Wait... is that mine?" if recorded as father; questions, concern or jealousy by style, affection and desire for another father; uncertain wording when the parentage is unknown), in a conversation, a check-in or a meeting. An imminent birth takes the check-in before anything else (no intimacy, no bed): the player can go alone or let the owner take them to the nursery (they are put there once and 15 minutes pass once). The owner's record is cleared when the pregnancy ends.
+- **Desire after sex** (directed, observer -> target, capped at 100): satisfying consensual sex raises each NPC participant's Desire for the partner (the player included: NPC -> player), a poor one lowers it (existing scaling); an NPC coercing (+3) or forcing (+5) raises the aggressor's Desire for the victim (the player or another NPC); a victim's Desire never rises, and the existing negative Affection, Trust and Fear stay; the player forcing an NPC changes nothing for the NPC's Desire. Owner nights go through the same aftermath exactly once (asked: consensual, demanded: coerced, forced: forced).
+- **For Milestone 9 (documented, not built).** Desire is the NPC's wish; Respect and Fear decide how it is acted on: high Desire with low Respect and low Fear makes a coercive or forced approach more likely; high Desire with ordinary or high Respect makes them ask; high Desire with high Fear makes a cautious or submissive approach, or avoidance, by personality; low Desire means little sexual interest whatever the vulnerability. Nudity, bondage, body writing, injuries and recent defeats (`pc_defeat`) raise the perceived opportunity; owner and gang protection (`protectionFacts`), guards and witnesses lower it. The inputs are all in place (`getFeeling`, `Ownership.pc_defeat`, `Module.getAttackMultiplier`); nothing uses them for targeting yet.
+
+### Punishment and the owner's evening
+
+- **Where it went wrong.** A punishment is the game's own `Punish` event, started by this module's owner event as a child; its result comes back through `reactEnded` with the tag `punishment`. Two things lost the parent: the child chain defaults to `SUB_END` (ending this event too), and the base class ends the event for the action id "endEvent" before any state code runs (so "settled" could never carry on to the night; it now uses its own id).
+- **Continuation.** `SandboxOwnerOps` now handles `reactEnded` itself and keeps a saved continuation (started, which punishment, done, whether it decided the night). Punishments that put the player somewhere (stocks, slutwall, being sold on, the test subject room) replace the night: the check-in is covered (never a miss), no bed is offered, the owner says so. A punishment the player fought off (the owner's hold on the player fell) does not force the player back to bed. Everything else (a reprimand, compensation, rough sex, clothes ripped, restraints, apologising, backing down, losing) returns to the stay and the real sleep scene.
+- **Active delivery.** A waiting warning, compensation or punishment is one saved meeting (a lighter pending meeting becomes it), shown on the Ownership screen, in Side Tasks (without the details) and as a Q on the owner; it comes before an offered job in the talk menu; the owner walks to the player, starts shortly when already in the room, finds the player after 20:00, postpones once when blocked, and is held once: inside the check-in if the player reports first, or in the daytime (the player still owes that night's check-in unless the punishment covers it).

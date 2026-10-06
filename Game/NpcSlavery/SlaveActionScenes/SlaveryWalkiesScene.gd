@@ -98,6 +98,8 @@ func _react(_action: String, _args):
 	if(_action == "return_to_cell"):
 		processTime(5*60)
 		GM.pc.setLocation(GM.pc.getCellLocation())
+		if(GlobalRegistry.getModule("SandboxOverhaulModule") != null):
+			GlobalRegistry.getModule("SandboxOverhaulModule").slaveWalksWithPlayer(npcID)
 		setState("return_to_cell")
 		npc.getNpcSlavery().addTired(2.0)
 		return
@@ -128,6 +130,8 @@ func _react(_action: String, _args):
 			processTime(30)
 			
 		GM.pc.setLocation(GM.world.applyDirectionID(GM.pc.location, _args[0]))
+		if(GlobalRegistry.getModule("SandboxOverhaulModule") != null):
+			GlobalRegistry.getModule("SandboxOverhaulModule").slaveWalksWithPlayer(npcID) # on the leash: the slave is in the room the player walked into
 		aimCamera(GM.pc.location)
 		GM.ES.triggerReact(Trigger.EnteringRoomWithSlave, [GM.pc.location, _args[1], npcID, walkiesType])
 		

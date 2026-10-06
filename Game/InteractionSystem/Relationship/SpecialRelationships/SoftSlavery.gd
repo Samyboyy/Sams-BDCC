@@ -65,9 +65,13 @@ func onStart(_args:Array):
 	npcOwner.onStart()
 	
 	showMessage(theChar.getName()+" became your [b][color=red]Owner[/color][/b]!")
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null):
+		sandboxModule.onOwnerStarted(theChar.getID()) # records it, sets a grace period before the first owner visit, and shows the terms
 
 func onEnd():
-	showMessage(getChar().getName()+" is no longer your Owner!")
+	if(getChar() != null): # (the character may have been deleted)
+		showMessage(getChar().getName()+" is no longer your Owner!")
 
 func onNewDay():
 	if(npcOwner):

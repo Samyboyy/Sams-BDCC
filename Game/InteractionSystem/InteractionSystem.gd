@@ -593,6 +593,9 @@ func calculatePawnDistribution() -> Dictionary:
 	return result
 
 func trySpawnSpecialRelationshipPawn() -> bool:
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && sandboxModule.keepsPrisonersPersistent()):
+		return false # owners are persistent inmates: respawning one would delete the pawn that is walking to the player
 	var allSpecial:Dictionary = GM.main.RS.special
 	if(allSpecial.empty()):
 		return false

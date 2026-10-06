@@ -120,6 +120,11 @@ static func grabNpcIDFromPool(poolID, _conditions = []):
 	return null
 
 static func generateNpcForPool(poolID, generator, _args = {}):
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && !sandboxModule.mayCreateCharacter(poolID)):
+		var existing = grabNpcIDFromPool(poolID, [])
+		if(existing != null):
+			return existing # the prison is full (see PrisonSchedule): meet somebody who is already here instead of creating one more
 	var newCharacter = generator.generate(_args)
 	GM.main.addDynamicCharacterToPool(newCharacter.id, poolID)
 	return newCharacter.id

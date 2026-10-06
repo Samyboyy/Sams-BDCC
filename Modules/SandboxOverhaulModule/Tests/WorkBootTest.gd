@@ -550,7 +550,7 @@ func _ready():
 	var _w = module.startShift("laundry")
 	var saved = JSON.parse(JSON.print(GM.GES.saveData())).result
 	var sb = saved["extendersData"]["SandboxGameExtender"]
-	check(sb["schema_version"] == 8 and sb["work"]["job"] == "laundry" and sb["work"]["history"]["completed"] == 3 and sb["upgrades"]["storage"] == true and !sb.has("storage") and sb["hidden_storage"].size() == 1, "saved at schema 8 with the job, upgrades and the hidden compartment (the stash is not duplicated)")
+	check(sb["schema_version"] == 9 and sb["work"]["job"] == "laundry" and sb["work"]["history"]["completed"] == 3 and sb["upgrades"]["storage"] == true and !sb.has("storage") and sb["hidden_storage"].size() == 1, "saved at schema 8 with the job, upgrades and the hidden compartment (the stash is not duplicated)")
 	var workBefore = JSON.print(SandboxOverhaulModule.getState().work)
 	var _w2 = module.withdrawItem(stashIDs()[0], false)
 	var saveGag = GlobalRegistry.createItem("ballgag")
@@ -584,7 +584,7 @@ func _ready():
 
 	# ---- Old saves ----
 	SandboxOverhaulModule.getState().loadData({"schema_version": 3, "reputation": {"combat": 4.0, "defiance": 0.0}})
-	check(SandboxOverhaulModule.getState().schema_version == 8 and !SandboxOverhaulModule.getEmployment().isEmployed() and !SandboxOverhaulModule.getUpgrades().owns("storage"), "a version 3 save is unemployed with no upgrades")
+	check(SandboxOverhaulModule.getState().schema_version == 9 and !SandboxOverhaulModule.getEmployment().isEmployed() and !SandboxOverhaulModule.getUpgrades().owns("storage"), "a version 3 save is unemployed with no upgrades")
 	check(SandboxOverhaulModule.getCombat().getCombatReputation() == 4.0, "and keeps what it had")
 
 	# ---- New game ----

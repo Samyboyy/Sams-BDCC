@@ -155,7 +155,7 @@ func _ready():
 	check(module != null and GlobalRegistry.getWorldEdit("SandboxGangHangoutWorldEdit") != null and GlobalRegistry.getSceneCreator("GangScene") != null, "module, world edit and scene registered")
 	var taskIDs = GlobalRegistry.getGlobalTasks().keys()
 	check(taskIDs.has("GangHangout0") and taskIDs.has("GangHangout1") and taskIDs.has("GangHangout2") and taskIDs.has("GangHangout3"), "the four hangout tasks are registered")
-	check(state.schema_version == 8 and !gs().isInitialized() and gs().gangIDs().empty(), "a new game has no gangs yet")
+	check(state.schema_version == 9 and !gs().isInitialized() and gs().gangIDs().empty(), "a new game has no gangs yet")
 	check(ViewsScript.statusLine().find("not formed") != -1 and ViewsScript.landing().empty(), "the screen says so, with nothing to list")
 
 	# ---- Real inmates and guards ----
@@ -216,7 +216,7 @@ func _ready():
 	var saved = JSON.parse(JSON.print(GM.GES.saveData())).result
 	state.clear()
 	GM.GES.loadData(JSON.parse(JSON.print(saved)).result)
-	check(JSON.print(state.gangs, "", true) == before and state.schema_version == 8, "the roster survives save and load exactly")
+	check(JSON.print(state.gangs, "", true) == before and state.schema_version == 9, "the roster survives save and load exactly")
 
 	# ---- Hangouts ----
 	var world = FakeWorld.new()
@@ -372,7 +372,9 @@ func _ready():
 	var _j2 = GangGameScript.join("ironhand")
 	var _s = g.setPersonal("pc", "ironhand", 20)
 	var offerText = GangGameScript.offerAssignment()
-	check(offerText.find("has a job for you") != -1 and af().getAssignment()["state"] == "offered" and af().getAssignment()["type"] == "defeat", "the leader offers a job (the combat gang wants a rival beaten)")
+	check(offerText.find("something they want you to do") != -1 and af().getAssignment()["state"] == "offered" and af().getAssignment()["type"] == "defeat", "the leader offers a job (the combat gang wants a rival beaten)")
+	var offerLeader = GangGameScript.gangs().getLeader(af().getAssignment()["gang"])
+	check(GangGameScript.taskView()["visible"] and GangGameScript.taskView()["title"].find("has a job for you") != -1 and !GangGameScript.taskMarks(offerLeader).empty() and GangGameScript.taskMarks(offerLeader)[0][1].find("Hear about the job") != -1, "an offered job is a Side Task and puts the Q on the leader")
 	check(GangGameScript.offerAssignment() == "", "only one at a time")
 	var declineText = GangGameScript.declineAssignment()
 	check(declineText.find("No harm") != -1 and g.getPersonal("pc", "ironhand") == 20 and !af().hasAssignment(), "declining costs nothing")

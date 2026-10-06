@@ -67,6 +67,9 @@ func resolveCustomCharacterName(_charID):
 	return eventStack.back().resolveCustomCharacterName(_charID)
 
 func runEvent(_id:String, _args:Array = [], _tag:String = ""):
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && eventStack.empty() && !sandboxModule.ownerMayStartEvent(ownerID)):
+		return # the owner is not standing with the player: the event waits until they have walked over and met
 	var theEvent = GlobalRegistry.createNpcOwnerEvent(_id)
 	if(!theEvent):
 		return

@@ -63,6 +63,27 @@ const SHARE_GUARDS = 0.2
 const SHARE_NURSES = 0.1
 const SHARE_ENGINEERS = 0.1
 
+# The most dynamic staff of each kind (the share of the pawn limit still applies below these). BDCC's own morning wave and spawner create a new character every time nobody is free to pick, and in a prison where
+# everybody stays on the map that is every time, so without these a prison filled up within days (45 inmates, 18 guards, 11 nurses and 8 engineers by day 14 were measured). Existing characters are never removed.
+const MAX_GUARDS = 10
+const MAX_NURSES = 5
+const MAX_ENGINEERS = 5
+
+# New prisoners arrive on a schedule, not whenever the spawner asks: the first ones at once (INMATE_START), then fewer and fewer as the soft target is approached, and never beyond the hard cap.
+const INMATE_SOFT_TARGET = 26
+const INMATE_HARD_CAP = 30
+const INMATE_START = 10
+const ADMISSION_DECAY = 0.93 # each day closes this share of what is left of the gap to the soft target
+
+# How many inmates the prison holds by this day (0 is the first day): 10, 11, ... about 20 on day 14, 24 on day 30, and never more than the soft target.
+static func inmateLimit(day:int) -> int:
+	var gap:float = float(INMATE_SOFT_TARGET - INMATE_START) * pow(ADMISSION_DECAY, float(max(0, day)))
+	return int(min(INMATE_SOFT_TARGET, INMATE_SOFT_TARGET - int(floor(gap))))
+
+# Whether one more inmate may be admitted now: below the schedule, and never past the hard cap (an overcrowded old save simply admits nobody).
+static func mayAdmitInmate(current:int, day:int) -> bool:
+	return current < inmateLimit(day) && current < INMATE_HARD_CAP
+
 # ---- Time ----
 # Stable offset (seconds) of one person's band changes, -30..+30 minutes.
 static func bandOffset(characterID) -> int:
@@ -209,7 +230,7 @@ static func budgets(pawnCap:int, inmatesAvailable:int) -> Dictionary:
 	var cap:int = int(max(0, pawnCap))
 	return {
 		"inmate": int(min(max(0, inmatesAvailable), int(round(float(cap) * SHARE_INMATES)))),
-		"guard": int(max(2, int(round(float(cap) * SHARE_GUARDS)))) if cap > 0 else 0,
-		"nurse": int(max(1, int(round(float(cap) * SHARE_NURSES)))) if cap > 0 else 0,
-		"engineer": int(max(1, int(round(float(cap) * SHARE_ENGINEERS)))) if cap > 0 else 0,
+		"guard": int(min(MAX_GUARDS, max(2, int(round(float(cap) * SHARE_GUARDS))))) if cap > 0 else 0,
+		"nurse": int(min(MAX_NURSES, max(1, int(round(float(cap) * SHARE_NURSES))))) if cap > 0 else 0,
+		"engineer": int(min(MAX_ENGINEERS, max(1, int(round(float(cap) * SHARE_ENGINEERS))))) if cap > 0 else 0,
 	}

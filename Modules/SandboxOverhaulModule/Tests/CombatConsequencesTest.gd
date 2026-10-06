@@ -49,7 +49,7 @@ func _init():
 	t.loadData({"reputation": "bad"})
 	check(ct.getCombatReputation() == 0.0 && ct.getDefiance() == 0.0, "non-dictionary reputation")
 	t.loadData({})
-	check(ct.getCombatReputation() == 0.0 && t.schema_version == 8, "old save without reputation, schema migrates to 7")
+	check(ct.getCombatReputation() == 0.0 && t.schema_version == 9, "old save without reputation, schema migrates to 7")
 	var input = {"reputation": {"combat": 5, "defiance": 6}}
 	t.loadData(input)
 	input["reputation"]["combat"] = 99

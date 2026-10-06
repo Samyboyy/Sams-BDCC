@@ -470,6 +470,11 @@ func updatePawn(worldPawn, pawn):
 	if(sandboxModule != null): # a second, independent badge for gang membership, next to the owner/friend/nemesis tag
 		var gangBadge:Dictionary = sandboxModule.getGangBadge(pawn.charID)
 		worldPawn.setGangBadge(gangBadge.get("text", ""), gangBadge.get("color", Color.white), gangBadge.get("tooltip", ""), !theTagAndColor[0].empty())
+		var slaveBadge:Dictionary = sandboxModule.getSlaveBadge(pawn.charID) # and a purple "S" for the player's own slaves, after the other badges
+		var slots:int = (1 if !theTagAndColor[0].empty() else 0) + (1 if !str(gangBadge.get("text", "")).empty() else 0)
+		worldPawn.setSlaveBadge(slaveBadge.get("text", ""), slaveBadge.get("color", Color.white), slaveBadge.get("tooltip", ""), slots)
+		var taskBadge:Dictionary = sandboxModule.getTaskBadge(pawn.charID) # and a yellow "Q" for the person a tracked task points at
+		worldPawn.setTaskBadge(taskBadge.get("text", ""), taskBadge.get("color", Color.white), taskBadge.get("tooltip", ""), slots + (1 if !slaveBadge.empty() else 0))
 
 func updatePawns(IS):
 	#var visiblePawns = {}

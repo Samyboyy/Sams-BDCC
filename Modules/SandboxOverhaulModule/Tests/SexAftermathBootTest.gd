@@ -78,7 +78,7 @@ func _ready():
 
 	# Coerced
 	runVanilla = module.applySexAftermathAndShouldRunVanilla(makeInteraction("AskingForKey", "sex_challenge_start", "npcCoerced", "pc"), sexData, makeResult(1.0, 1.0))
-	check(runVanilla == false and !rel.hasRelationship("npcCoerced", "pc") and near(RS.getAffection("npcCoerced", "pc"), -0.1) and RS.getLust("npcCoerced", "pc") == 0.0, "player victim: vanilla suppressed, legacy lowered, nothing stored")
+	check(runVanilla == false and rel.getFeeling("npcCoerced", "pc", "desire") == 3.0 and rel.getFeeling("npcCoerced", "pc", "affection") == 0.0 and !rel.hasRelationship("pc", "npcCoerced") and near(RS.getAffection("npcCoerced", "pc"), -0.1) and RS.getLust("npcCoerced", "pc") == 0.0, "player victim: vanilla suppressed, legacy lowered, only the aggressor's Desire (+3, NPC -> player) stored")
 	runVanilla = module.applySexAftermathAndShouldRunVanilla(makeInteraction("AskingForKey", "sex_challenge_start", "pc", "npcCoerced"), sexData, makeResult(1.0, 1.0))
 	check(runVanilla == false and near(RS.getAffection("npcCoerced", "pc"), -0.2) and near(rel.getFeeling("npcCoerced", "pc", "trust"), -15), "coerced")
 
@@ -106,7 +106,7 @@ func _ready():
 	check(RS.getAffection("npcPcVictim", "pc") < 0.45 and RS.getAffection("npcPcVictim", "pc") <= 0.49, "NPC forces player: legacy affection does not increase")
 	check(RS.getLust("npcPcVictim", "pc") <= lustBefore, "NPC forces player: legacy lust does not increase")
 	check(!RS.hasSpecialRelationship("npcPcVictim"), "NPC forces player: no Friend")
-	check(!rel.hasRelationship("npcPcVictim", "pc") and !rel.hasRelationship("pc", "npcPcVictim"), "NPC forces player: no directed change")
+	check(rel.getFeeling("npcPcVictim", "pc", "desire") == 5.0 and rel.getFeeling("npcPcVictim", "pc", "affection") == 0.0 and rel.getFeeling("npcPcVictim", "pc", "trust") == 0.0 and !rel.hasRelationship("pc", "npcPcVictim"), "NPC forces player: only the aggressor's Desire for the player rises (+5), nothing improves for the victim")
 
 	# NPC forces the player while already being the player's Friend: the Friend ends.
 	RS.addAffection("npcFriend2", "pc", 0.9, false, false)

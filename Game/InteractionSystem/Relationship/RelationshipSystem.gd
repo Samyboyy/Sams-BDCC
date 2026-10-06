@@ -254,6 +254,10 @@ func startSpecialRelantionship(_relationshipID:String, _charID:String, _args:Arr
 		return
 	if(theChar.getNpcSlavery()): # player's slaves can't be nemesis
 		return
+	if(_relationshipID == "SoftSlavery"):
+		var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+		if(sandboxModule != null && !sandboxModule.mayStartOwner(_charID)):
+			return # there is only ever one owner: somebody else claiming the player has to win the claim first
 	var newShip = GlobalRegistry.createSpecialRelationship(_relationshipID)
 	if(!newShip):
 		return

@@ -461,7 +461,9 @@ func _ready():
 	for interaction in IS.interactions:
 		if(interaction.id == "GenericAttack" and !interaction.wasDeleted and interaction.getRoleID("starter") == "pc"):
 			mine = interaction
-	check(mine != null and mine.getRoleID("reacter") == foeID and rel().getFeeling(friendID, "pc", "respect") >= 5.0 and rel().getFeeling(friendID, "pc", "trust") > 50.0, "helping takes the friend's side and earns trust and respect")
+	check(mine != null and mine.getRoleID("reacter") == foeID and rel().getFeeling(friendID, "pc", "respect") == 0.0, "helping takes the friend's side; the thanks wait for the result")
+	var trustBeforeWin = rel().getFeeling(friendID, "pc", "trust")
+	check(HelpScript.acknowledge(module, foeID, true) and rel().getFeeling(friendID, "pc", "trust") > trustBeforeWin and rel().getFeeling(friendID, "pc", "affection") > 50.0 and !HelpScript.acknowledge(module, foeID, true), "winning earns the friend's trust and affection, once")
 	if(mine != null):
 		IS.stopInteraction(mine)
 	endPlayerInteractions()

@@ -22,6 +22,9 @@ func getScore(_pawn:CharacterPawn) -> float:
 		return 0.0
 	if(!canReachPC()):
 		return 0.0
+	var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+	if(sandboxModule != null && !sandboxModule.ownerMayApproach(_pawn.charID)):
+		return 0.0 # held, hurt, busy or cut off: the visit is postponed and tried again after a delay
 	if(npcOwner.shouldOwnerApproachPC()):
 		return 100.0
 	return 0.0
@@ -48,6 +51,10 @@ func doAction(_id:String, _args:Dictionary):
 	if(_id == "go"):
 		var npcOwner := getNpcOwner(getPawn())
 		if(!npcOwner || !canReachPC()):
+			completeGoal()
+			return
+		var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+		if(sandboxModule != null && !sandboxModule.ownerMayApproach(getPawn().charID)):
 			completeGoal()
 			return
 		

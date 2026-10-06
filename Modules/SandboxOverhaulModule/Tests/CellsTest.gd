@@ -172,7 +172,7 @@ func _init():
 	var t = StateScript.new()
 	var ct = CellsScript.new(t)
 	t.loadData(saved)
-	check(t.schema_version == 8, "saved at schema 8")
+	check(t.schema_version == 9, "saved at schema 8")
 	check(JSON.print(t.cell_assignments) == JSON.print(s.cell_assignments) and JSON.print(t.known_cells) == JSON.print(s.known_cells), "exact round trip of assignments and known cells")
 	check(ct.getCellmate("pc") == "a" and ct.knowsCell("pc", "a") and ct.knowsCell("pc", "c") and !ct.knowsCell("pc", "b"), "and the API reads them")
 	var tr = RelScript.new(t)
@@ -191,11 +191,11 @@ func _init():
 
 	# ---- Migration ----
 	t.loadData({"schema_version": 2, "cell_assignments": {"pc": {"block": "orange", "cell": 1}}, "known_cells": {"pc": {"a": true}}, "injuries": {"pc": {"arm": {"severity": 2, "remainingHours": 10}}}, "reputation": {"combat": 9, "defiance": 1}})
-	check(t.schema_version == 8 and t.cell_assignments.empty() and t.known_cells.empty() and t.injuries.has("pc") and near(t.reputation["combat"], 9.0), "version 2 loads with no cells (created on first use); injuries and reputation kept")
+	check(t.schema_version == 9 and t.cell_assignments.empty() and t.known_cells.empty() and t.injuries.has("pc") and near(t.reputation["combat"], 9.0), "version 2 loads with no cells (created on first use); injuries and reputation kept")
 	t.loadData({"schema_version": 1, "cell_assignments": {"bob": "A1"}})
-	check(t.schema_version == 8 and t.cell_assignments.empty(), "version 1 with the old unused cell field loads clean")
+	check(t.schema_version == 9 and t.cell_assignments.empty(), "version 1 with the old unused cell field loads clean")
 	t.loadData({})
-	check(t.schema_version == 8 and t.cell_assignments.empty(), "an empty save loads clean")
+	check(t.schema_version == 9 and t.cell_assignments.empty(), "an empty save loads clean")
 	t.loadData({"schema_version": 99, "cell_assignments": {"pc": {"block": "red", "cell": 2}}, "known_cells": {"pc": {"a": true}}})
 	check(t.schema_version == 99 and t.cell_assignments["pc"]["cell"] == 2 and t.known_cells["pc"]["a"] == true, "a newer schema keeps its data and is not downgraded")
 
@@ -256,7 +256,7 @@ func _init():
 	tp.loadData({"schema_version": 3, "cell_assignments": {"pc": {"block": "orange", "cell": 1}}})
 	check(tp.cell_presence.empty() and tp.cell_assignments.has("pc"), "a version-3 save without attendance loads with none")
 	tp.loadData({"schema_version": 2, "cell_presence": {"a": {"night": 5, "state": "home"}}})
-	check(tp.cell_presence.empty() and tp.schema_version == 8, "an older save ignores attendance")
+	check(tp.cell_presence.empty() and tp.schema_version == 9, "an older save ignores attendance")
 	tp.loadData({"schema_version": 3, "cell_presence": {"a": {"night": 5.0, "state": "home"}, "b": {"night": "x", "state": "home"}, "c": {"night": 5, "state": "lost"}, "": {"night": 5, "state": "home"}, "d": "x", "e": {"state": "away"}}})
 	check(tp.cell_presence.keys() == ["a"] and typeof(tp.cell_presence["a"]["night"]) == TYPE_INT, "malformed attendance dropped, numbers become ints: " + str(tp.cell_presence))
 	tp.loadData({"schema_version": 3, "cell_presence": "bad"})

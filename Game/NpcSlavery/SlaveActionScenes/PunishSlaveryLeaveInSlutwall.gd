@@ -25,6 +25,9 @@ func _run():
 			saynn("After all, why shouldn't other be able to have fun with {npc.him}?")
 		else:
 			aimCameraAndSetLocName("main_punishment_spot")
+			var sandboxModule = GlobalRegistry.getModule("SandboxOverhaulModule")
+			if(sandboxModule != null):
+				sandboxModule.slaveFollowsPlayer(npcID, "fight_slutwall")
 			GM.pc.setLocation("main_punishment_spot")
 			
 			saynn("After {npc.name} serves {npc.his} punishment, you decide to leave {npc.him} stuck in there.")

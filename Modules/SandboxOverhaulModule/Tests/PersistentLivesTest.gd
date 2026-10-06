@@ -202,16 +202,16 @@ func leisureKinds(plan) -> Array:
 
 func stateTests():
 	var s = StateScript.new()
-	check(s.schema_version == 8 and s.presence.empty() and same(s.routines, PresenceScript.defaultRoutines()), "a new game has the schema 8 fields, empty")
+	check(s.schema_version == 9 and s.presence.empty() and same(s.routines, PresenceScript.defaultRoutines()), "a new game has the schema 8 fields, empty")
 	var plan = RoutineScript.planFor("i01", 3, facts())
 	s.routines = {"day": 3, "plans": {"i01": plan}}
 	s.presence = {"i01": {"room": "hall_canteen", "kind": "meal", "act": "do", "dest": "hall_canteen", "since": 300000, "seg": 4}}
 	var t = StateScript.new()
 	t.loadData(JSON.parse(JSON.print(s.saveData())).result)
-	check(same(t.routines, s.routines) and same(t.presence, s.presence) and t.schema_version == 8, "routines and presence survive save and load exactly, so loading never rerolls the day")
+	check(same(t.routines, s.routines) and same(t.presence, s.presence) and t.schema_version == 9, "routines and presence survive save and load exactly, so loading never rerolls the day")
 	var old = StateScript.new()
 	old.loadData({"schema_version": 7})
-	check(old.schema_version == 8 and old.routines["day"] == -1 and old.presence.empty(), "a schema 7 save loads with no routines and no presence")
+	check(old.schema_version == 9 and old.routines["day"] == -1 and old.presence.empty(), "a schema 7 save loads with no routines and no presence")
 	var future = StateScript.new()
 	future.loadData({"schema_version": 9, "routines": {"day": 5, "plans": {}}, "presence": {"i01": {"room": "x"}}})
 	check(future.schema_version == 9 and future.routines["day"] == 5 and future.presence.has("i01"), "a newer save keeps its data and its version")

@@ -226,7 +226,7 @@ func _ready():
 	var state = SandboxOverhaulModule.getState()
 
 	# ---- A new game ----
-	check(sec.getAttention() == 0.0 and !sec.isActive() and state.security["warning"]["kind"] == "" and state.schema_version == 8, "a new game has attention 0 and nothing pending")
+	check(sec.getAttention() == 0.0 and !sec.isActive() and state.security["warning"]["kind"] == "" and state.schema_version == 9, "a new game has attention 0 and nothing pending")
 	var screen = module.getSecurityScreenText()
 	check(screen.find("0 / 100") != -1 and screen.find("Routine") != -1, "the Security section shows the attention and label: " + screen)
 
@@ -779,7 +779,7 @@ func _ready():
 	var attentionSaved = sec.getAttention()
 	var saved = JSON.parse(JSON.print(GM.GES.saveData())).result
 	var sb = saved["extendersData"]["SandboxGameExtender"]
-	check(sb["schema_version"] == 8 and sb["security"]["attention"] == attentionSaved and sb["security"]["pending"]["kind"] == "violent" and sb["security"]["warning"]["kind"] == "nudity" and sb["security"]["search_stamp"] >= 0, "saved at schema 8 with the attention, report, warning and cooldowns")
+	check(sb["schema_version"] == 9 and sb["security"]["attention"] == attentionSaved and sb["security"]["pending"]["kind"] == "violent" and sb["security"]["warning"]["kind"] == "nudity" and sb["security"]["search_stamp"] >= 0, "saved at schema 8 with the attention, report, warning and cooldowns")
 	SandboxOverhaulModule.getState().clear()
 	check(SandboxOverhaulModule.getSecurity().getAttention() == 0.0, "cleared")
 	for _k in range(3):
@@ -788,7 +788,7 @@ func _ready():
 	check(SandboxOverhaulModule.getState().security["search_stamp"] == sb["security"]["search_stamp"] and !SandboxOverhaulModule.getSecurity().getPending(module.getSecurityNow()).empty(), "cooldowns and the waiting report survive")
 	check(SandboxOverhaulModule.getState().work.has("job") and SandboxOverhaulModule.getState().upgrades.has("hidden"), "jobs and upgrades are still in the state")
 	SandboxOverhaulModule.getState().loadData({"schema_version": 4, "reputation": {"combat": 3.0, "defiance": 0.0}})
-	check(SandboxOverhaulModule.getState().schema_version == 8 and SandboxOverhaulModule.getSecurity().getAttention() == 0.0, "an older save loads at attention 0")
+	check(SandboxOverhaulModule.getState().schema_version == 9 and SandboxOverhaulModule.getSecurity().getAttention() == 0.0, "an older save loads at attention 0")
 
 	# ---- Verification: the real guard pool ----
 	main.holder = self
